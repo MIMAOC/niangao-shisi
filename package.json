@@ -1,0 +1,19 @@
+{
+  "name": "niangao-shisi",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  },
+  "uuid": "8d46c839-907f-4f30-a1bc-058e7b9a3b58",
+  "creator": {
+    "version": "3.8.8"
+  }
+}
