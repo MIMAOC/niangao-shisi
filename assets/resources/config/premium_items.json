@@ -1,0 +1,7 @@
+[
+  { "id": "wildcard_merge", "name": "万能合成券", "pricePremiumIngots": 12, "effect": "wildcard_merge", "dailyLimit": 3 },
+  { "id": "refresh_order", "name": "刷新订单券", "pricePremiumIngots": 5, "effect": "refresh_order", "dailyLimit": 10 },
+  { "id": "basic_item_pack", "name": "指定 1 级食材包", "pricePremiumIngots": 8, "effect": "basic_item_pack", "dailyLimit": 5 },
+  { "id": "board_sort", "name": "棋盘整理券", "pricePremiumIngots": 6, "effect": "board_sort", "dailyLimit": 5 },
+  { "id": "temporary_bag_slot", "name": "临时背包格", "pricePremiumIngots": 20, "effect": "temporary_bag_slot", "dailyLimit": 1 }
+]

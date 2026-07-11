@@ -1,0 +1,14 @@
+[
+  { "id": "rice_1", "name": "米粒", "chain": "rice", "level": 1, "nextId": "rice_2", "icon": "icons/rice_1" },
+  { "id": "rice_2", "name": "米团", "chain": "rice", "level": 2, "nextId": "rice_3", "icon": "icons/rice_2" },
+  { "id": "rice_3", "name": "海苔饭团", "chain": "rice", "level": 3, "nextId": "rice_4", "icon": "icons/rice_3" },
+  { "id": "rice_4", "name": "招牌饭团", "chain": "rice", "level": 4, "nextId": null, "icon": "icons/rice_4" },
+  { "id": "tea_1", "name": "茶叶", "chain": "tea", "level": 1, "nextId": "tea_2", "icon": "icons/tea_1" },
+  { "id": "tea_2", "name": "热茶", "chain": "tea", "level": 2, "nextId": "tea_3", "icon": "icons/tea_2" },
+  { "id": "tea_3", "name": "奶茶", "chain": "tea", "level": 3, "nextId": "tea_4", "icon": "icons/tea_3" },
+  { "id": "tea_4", "name": "云朵奶茶", "chain": "tea", "level": 4, "nextId": null, "icon": "icons/tea_4" },
+  { "id": "sweet_potato_1", "name": "红薯", "chain": "sweet_potato", "level": 1, "nextId": "sweet_potato_2", "icon": "icons/sweet_potato_1" },
+  { "id": "sweet_potato_2", "name": "烤红薯", "chain": "sweet_potato", "level": 2, "nextId": "sweet_potato_3", "icon": "icons/sweet_potato_2" },
+  { "id": "sweet_potato_3", "name": "蜜烤红薯", "chain": "sweet_potato", "level": 3, "nextId": "sweet_potato_4", "icon": "icons/sweet_potato_3" },
+  { "id": "sweet_potato_4", "name": "星星红薯", "chain": "sweet_potato", "level": 4, "nextId": null, "icon": "icons/sweet_potato_4" }
+]

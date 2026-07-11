@@ -1,0 +1,12 @@
+[
+  { "level": 1, "cumulativeExperience": 0, "unlocks": ["饭团线 1-2 级", "基础订单"] },
+  { "level": 2, "cumulativeExperience": 30, "unlocks": ["饮品线 1-2 级"] },
+  { "level": 3, "cumulativeExperience": 75, "unlocks": ["小吃线 1-2 级"] },
+  { "level": 4, "cumulativeExperience": 130, "unlocks": ["3 级食物订单"] },
+  { "level": 5, "cumulativeExperience": 210, "unlocks": ["少年猫"] },
+  { "level": 6, "cumulativeExperience": 310, "unlocks": ["同时显示 3 个订单"] },
+  { "level": 7, "cumulativeExperience": 430, "unlocks": ["4 级食物订单"] },
+  { "level": 8, "cumulativeExperience": 580, "unlocks": ["小摊灯串装饰"] },
+  { "level": 9, "cumulativeExperience": 760, "unlocks": ["高级订单刷新概率提升"] },
+  { "level": 10, "cumulativeExperience": 980, "unlocks": ["大猫", "MVP 阶段目标完成"] }
+]

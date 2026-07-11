@@ -1,0 +1,4 @@
+[
+  { "id": "sheep_milk", "name": "羊奶", "priceCoins": 5, "intimacyGain": 3, "allowedStages": ["kitten"] },
+  { "id": "cat_food", "name": "猫粮", "priceCoins": 12, "intimacyGain": 4, "allowedStages": ["adolescent_cat", "adult_cat"] }
+]

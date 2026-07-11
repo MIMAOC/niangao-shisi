@@ -1,0 +1,5 @@
+[
+  { "id": "kitten", "unlockShopLevel": 1, "acceptedFoodIds": ["sheep_milk"], "bonus": { "type": "bring_item", "value": 1 } },
+  { "id": "adolescent_cat", "unlockShopLevel": 5, "acceptedFoodIds": ["cat_food"], "bonus": { "type": "coins_percent", "value": 2 } },
+  { "id": "adult_cat", "unlockShopLevel": 10, "acceptedFoodIds": ["cat_food"], "bonus": { "type": "healing_percent", "value": 5 } }
+]

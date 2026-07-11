@@ -1,0 +1,51 @@
+{
+  "student": [
+    { "level": 1, "requiredHealingPoints": 0, "rewardType": "none", "rewardValue": 0 },
+    { "level": 2, "requiredHealingPoints": 20, "rewardType": "coins_percent", "rewardValue": 1 },
+    { "level": 3, "requiredHealingPoints": 60, "rewardType": "order_rate_percent", "rewardValue": 3 },
+    { "level": 4, "requiredHealingPoints": 120, "rewardType": "daily_item", "rewardValue": "random_level_1" },
+    { "level": 5, "requiredHealingPoints": 220, "rewardType": "cosmetic", "rewardValue": "customer_portrait_frame" }
+  ],
+  "worker": [
+    { "level": 1, "requiredHealingPoints": 0, "rewardType": "none", "rewardValue": 0 },
+    { "level": 2, "requiredHealingPoints": 20, "rewardType": "coins_percent", "rewardValue": 1 },
+    { "level": 3, "requiredHealingPoints": 60, "rewardType": "order_rate_percent", "rewardValue": 3 },
+    { "level": 4, "requiredHealingPoints": 120, "rewardType": "daily_item", "rewardValue": "random_level_1" },
+    { "level": 5, "requiredHealingPoints": 220, "rewardType": "cosmetic", "rewardValue": "customer_portrait_frame" }
+  ],
+  "elder": [
+    { "level": 1, "requiredHealingPoints": 0, "rewardType": "none", "rewardValue": 0 },
+    { "level": 2, "requiredHealingPoints": 20, "rewardType": "coins_percent", "rewardValue": 1 },
+    { "level": 3, "requiredHealingPoints": 60, "rewardType": "order_rate_percent", "rewardValue": 3 },
+    { "level": 4, "requiredHealingPoints": 120, "rewardType": "daily_item", "rewardValue": "random_level_1" },
+    { "level": 5, "requiredHealingPoints": 220, "rewardType": "cosmetic", "rewardValue": "customer_portrait_frame" }
+  ],
+  "courier": [
+    { "level": 1, "requiredHealingPoints": 0, "rewardType": "none", "rewardValue": 0 },
+    { "level": 2, "requiredHealingPoints": 20, "rewardType": "coins_percent", "rewardValue": 1 },
+    { "level": 3, "requiredHealingPoints": 60, "rewardType": "order_rate_percent", "rewardValue": 3 },
+    { "level": 4, "requiredHealingPoints": 120, "rewardType": "daily_item", "rewardValue": "random_level_1" },
+    { "level": 5, "requiredHealingPoints": 220, "rewardType": "cosmetic", "rewardValue": "customer_portrait_frame" }
+  ],
+  "medical": [
+    { "level": 1, "requiredHealingPoints": 0, "rewardType": "none", "rewardValue": 0 },
+    { "level": 2, "requiredHealingPoints": 20, "rewardType": "coins_percent", "rewardValue": 1 },
+    { "level": 3, "requiredHealingPoints": 60, "rewardType": "order_rate_percent", "rewardValue": 3 },
+    { "level": 4, "requiredHealingPoints": 120, "rewardType": "daily_item", "rewardValue": "random_level_1" },
+    { "level": 5, "requiredHealingPoints": 220, "rewardType": "cosmetic", "rewardValue": "customer_portrait_frame" }
+  ],
+  "couple": [
+    { "level": 1, "requiredHealingPoints": 0, "rewardType": "none", "rewardValue": 0 },
+    { "level": 2, "requiredHealingPoints": 20, "rewardType": "coins_percent", "rewardValue": 1 },
+    { "level": 3, "requiredHealingPoints": 60, "rewardType": "order_rate_percent", "rewardValue": 3 },
+    { "level": 4, "requiredHealingPoints": 120, "rewardType": "daily_item", "rewardValue": "random_level_1" },
+    { "level": 5, "requiredHealingPoints": 220, "rewardType": "cosmetic", "rewardValue": "customer_portrait_frame" }
+  ],
+  "mystery": [
+    { "level": 1, "requiredHealingPoints": 0, "rewardType": "none", "rewardValue": 0 },
+    { "level": 2, "requiredHealingPoints": 20, "rewardType": "coins_percent", "rewardValue": 1 },
+    { "level": 3, "requiredHealingPoints": 60, "rewardType": "order_rate_percent", "rewardValue": 3 },
+    { "level": 4, "requiredHealingPoints": 120, "rewardType": "daily_item", "rewardValue": "random_level_1" },
+    { "level": 5, "requiredHealingPoints": 220, "rewardType": "cosmetic", "rewardValue": "customer_portrait_frame" }
+  ]
+}
