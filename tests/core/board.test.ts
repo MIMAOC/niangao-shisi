@@ -3,7 +3,7 @@ import {
   createBoard,
   hasAvailableBoardCell,
   moveBoardItem,
-  moveBackpack,
+  moveFixture,
   spawnBasicItem,
   tryMerge
 } from '../../assets/scripts/core/board';
@@ -46,38 +46,71 @@ describe('board', () => {
     expect(hasAvailableBoardCell(board, [1])).toBe(true);
   });
 
-  it('moves the backpack to an empty cell', () => {
-    const result = moveBackpack(createBoard(), 62, 10);
+  it('moves a fixture to an empty cell', () => {
+    const result = moveFixture(createBoard(), 62, 10);
 
     expect(result.moved).toBe(true);
-    expect(result.backpackCellIndex).toBe(10);
+    expect(result.fixtureCellIndex).toBe(10);
   });
 
-  it('pushes an occupied target item out of the backpack cell', () => {
+  it('pushes an occupied target item out of the fixture cell', () => {
     const board = createBoard();
     board[10].itemId = 'rice_1';
 
-    const result = moveBackpack(board, 62, 10);
+    const result = moveFixture(board, 62, 10);
 
     expect(result.moved).toBe(true);
-    expect(result.backpackCellIndex).toBe(10);
+    expect(result.fixtureCellIndex).toBe(10);
     expect(result.board[10].itemId).toBeNull();
     expect(result.board[3].itemId).toBe('rice_1');
     expect(result.displaced).toEqual({ itemId: 'rice_1', fromIndex: 10, toIndex: 3 });
   });
 
-  it('swaps the backpack with the target item when every other cell is full', () => {
+  it('swaps a fixture with the target item when every other cell is full', () => {
     const board = createBoard();
     board.forEach((cell) => {
       if (cell.index !== 62) cell.itemId = 'rice_2';
     });
     board[10].itemId = 'rice_1';
 
-    const result = moveBackpack(board, 62, 10);
+    const result = moveFixture(board, 62, 10);
 
     expect(result.moved).toBe(true);
     expect(result.board[10].itemId).toBeNull();
     expect(result.board[62].itemId).toBe('rice_1');
+  });
+
+  it('pushes the other fixture aside instead of refusing the cell', () => {
+    // 备料台 61 压到背包 62 头上：背包照样被顺时针挤开，不再是「背包占用此格」。
+    const result = moveFixture(createBoard(), 61, 62, 62);
+
+    expect(result.moved).toBe(true);
+    expect(result.fixtureCellIndex).toBe(62);
+    expect(result.otherFixtureCellIndex).toBe(55);
+  });
+
+  it('swaps the two fixtures when no cell is free', () => {
+    const board = createBoard();
+    board.forEach((cell) => {
+      if (cell.index !== 61 && cell.index !== 62) cell.itemId = 'rice_2';
+    });
+
+    const result = moveFixture(board, 61, 62, 62);
+
+    expect(result.moved).toBe(true);
+    expect(result.fixtureCellIndex).toBe(62);
+    expect(result.otherFixtureCellIndex).toBe(61);
+  });
+
+  it('keeps a displaced item off the other fixture cell', () => {
+    const board = createBoard();
+    board[10].itemId = 'rice_1';
+
+    // 3 是奶茶顺时针的第一个落点，但那里正杵着另一台设施。
+    const result = moveFixture(board, 62, 10, 3);
+
+    expect(result.board[3].itemId).toBeNull();
+    expect(result.board[4].itemId).toBe('rice_1');
   });
 
   it('merges identical items into next level', () => {

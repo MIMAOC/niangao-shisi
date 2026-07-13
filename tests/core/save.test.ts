@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PREP_STATION_ID, storePrepStationInBackpack } from '../../assets/scripts/core/backpack';
 import { createInitialGameState } from '../../assets/scripts/core/gameState';
 import { deserializeSave, serializeSave } from '../../assets/scripts/core/save';
 
@@ -39,6 +40,15 @@ describe('save', () => {
 
     expect(restored.prepStationCellIndex).not.toBe(restored.backpackCellIndex);
     expect(restored.board[restored.prepStationCellIndex].itemId).toBeNull();
+  });
+
+  it('leaves the prep station in the backpack instead of dragging it back onto the board', () => {
+    const state = storePrepStationInBackpack(createInitialGameState(1000), 2000).state;
+
+    const restored = deserializeSave(serializeSave(state));
+
+    expect(restored.prepStationCellIndex).toBe(-1);
+    expect(restored.backpackItemIds).toEqual([PREP_STATION_ID]);
   });
 
   it('initializes ten empty backpack slots when loading a pre-storage save', () => {

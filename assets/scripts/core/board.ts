@@ -14,9 +14,11 @@ export interface DisplacedItem {
   toIndex: number;
 }
 
-export interface BackpackMoveResult {
+export interface FixtureMoveResult {
   moved: boolean;
-  backpackCellIndex: number;
+  fixtureCellIndex: number;
+  /** 另一台设施被挤开后落在哪；没有另一台设施时为 -1。 */
+  otherFixtureCellIndex: number;
   board: BoardCell[];
   displaced?: DisplacedItem;
   reason?: 'invalid_index';
@@ -55,28 +57,59 @@ export function spawnBasicItem(
   return next;
 }
 
-export function moveBackpack(
+/**
+ * 挪动背包 / 备料台这类占格设施。目标格上是谁都一样：食材被顺时针挤开，
+ * 另一台设施同样被顺时针挤开——设施不比食材金贵。
+ */
+export function moveFixture(
   board: BoardCell[],
   fromIndex: number,
   toIndex: number,
-  reservedCellIndexes: number[] = []
-): BackpackMoveResult {
+  otherFixtureIndex = -1
+): FixtureMoveResult {
   if (!board[fromIndex] || !board[toIndex]) {
-    return { moved: false, backpackCellIndex: fromIndex, board, reason: 'invalid_index' };
+    return {
+      moved: false,
+      fixtureCellIndex: fromIndex,
+      otherFixtureCellIndex: otherFixtureIndex,
+      board,
+      reason: 'invalid_index'
+    };
   }
 
   const next = board.map((cell) => ({ ...cell }));
-  const targetItemId = next[toIndex].itemId;
+  const reserved = otherFixtureIndex === -1 ? [] : [otherFixtureIndex];
+  let otherCellIndex = otherFixtureIndex;
   let displaced: DisplacedItem | undefined;
-  if (targetItemId !== null) {
-    let escapeIndex = findDisplacementCell(next, toIndex, fromIndex, reservedCellIndexes);
-    if (escapeIndex === -1) escapeIndex = fromIndex;
+
+  if (toIndex === otherFixtureIndex) {
+    otherCellIndex = findEscapeCell(next, toIndex, fromIndex, []);
+  } else if (next[toIndex].itemId !== null) {
+    const targetItemId = next[toIndex].itemId;
+    const escapeIndex = findEscapeCell(next, toIndex, fromIndex, reserved);
     next[escapeIndex].itemId = targetItemId;
     next[toIndex].itemId = null;
     displaced = { itemId: targetItemId, fromIndex: toIndex, toIndex: escapeIndex };
   }
 
-  return { moved: true, backpackCellIndex: toIndex, board: next, displaced };
+  return {
+    moved: true,
+    fixtureCellIndex: toIndex,
+    otherFixtureCellIndex: otherCellIndex,
+    board: next,
+    displaced
+  };
+}
+
+/** 找不到空位（棋盘全满）就退回源格，也就是跟推手互换。 */
+export function findEscapeCell(
+  board: BoardCell[],
+  targetIndex: number,
+  sourceIndex: number,
+  reservedCellIndexes: number[]
+): number {
+  const escapeIndex = findDisplacementCell(board, targetIndex, sourceIndex, reservedCellIndexes);
+  return escapeIndex === -1 ? sourceIndex : escapeIndex;
 }
 
 export function moveBoardItem(

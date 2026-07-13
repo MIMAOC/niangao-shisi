@@ -1,5 +1,5 @@
 import type { GameState } from './types';
-import { INITIAL_BACKPACK_CAPACITY } from './backpack';
+import { INITIAL_BACKPACK_CAPACITY, PREP_STATION_ID } from './backpack';
 
 const SAVE_VERSION = 1;
 
@@ -44,7 +44,11 @@ export function deserializeSave(payload: string): GameState {
 
     const prepStationIndex = state.prepStationCellIndex;
     const prepStationCell = state.board[prepStationIndex];
-    if (prepStationCell?.itemId !== null || prepStationIndex === state.backpackCellIndex) {
+    const prepStationInBackpack = state.backpackItemIds.includes(PREP_STATION_ID);
+    if (
+      !prepStationInBackpack &&
+      (prepStationCell?.itemId !== null || prepStationIndex === state.backpackCellIndex)
+    ) {
       const emptyCell = [...state.board]
         .reverse()
         .find((cell) => cell.itemId === null && cell.index !== state.backpackCellIndex);

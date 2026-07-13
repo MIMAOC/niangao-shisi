@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { storeBoardItemInBackpack, takeBackpackItemToBoard } from '../../assets/scripts/core/backpack';
+import {
+  PREP_STATION_ID,
+  storeBoardItemInBackpack,
+  storePrepStationInBackpack,
+  takeBackpackItemToBoard
+} from '../../assets/scripts/core/backpack';
 import { createInitialGameState } from '../../assets/scripts/core/gameState';
 
 describe('backpack', () => {
@@ -59,5 +64,35 @@ describe('backpack', () => {
     expect(result.taken).toBe(false);
     expect(result.reason).toBe('board_full');
     expect(result.state.backpackItemIds).toEqual(['rice_1']);
+  });
+
+  it('stores the prep station in the backpack and frees its cell', () => {
+    const state = createInitialGameState(1000);
+
+    const result = storePrepStationInBackpack(state, 2000);
+
+    expect(result.stored).toBe(true);
+    expect(result.state.prepStationCellIndex).toBe(-1);
+    expect(result.state.backpackItemIds).toEqual([PREP_STATION_ID]);
+  });
+
+  it('puts the prep station back on the board instead of spawning an item', () => {
+    const state = storePrepStationInBackpack(createInitialGameState(1000), 2000).state;
+
+    const result = takeBackpackItemToBoard(state, 0, 3000);
+
+    expect(result.taken).toBe(true);
+    expect(result.state.prepStationCellIndex).toBe(result.cellIndex);
+    expect(result.state.board[result.cellIndex].itemId).toBeNull();
+    expect(result.state.backpackItemIds).toEqual([]);
+  });
+
+  it('refuses to store the prep station twice', () => {
+    const state = storePrepStationInBackpack(createInitialGameState(1000), 2000).state;
+
+    const result = storePrepStationInBackpack(state, 3000);
+
+    expect(result.stored).toBe(false);
+    expect(result.state.backpackItemIds).toEqual([PREP_STATION_ID]);
   });
 });

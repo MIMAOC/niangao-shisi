@@ -1,6 +1,8 @@
 import type { GameState } from './types';
 
 export const INITIAL_BACKPACK_CAPACITY = 10;
+/** 备料台收进背包时占一个槽位；此时 prepStationCellIndex 为 -1。 */
+export const PREP_STATION_ID = 'prep_station';
 
 export interface BackpackStoreResult {
   stored: boolean;
@@ -42,13 +44,32 @@ export function storeBoardItemInBackpack(
   };
 }
 
+export function storePrepStationInBackpack(state: GameState, now = Date.now()): BackpackStoreResult {
+  if (state.prepStationCellIndex === -1) {
+    return { stored: false, state, reason: 'invalid_source' };
+  }
+  if (state.backpackItemIds.length >= state.backpackCapacity) {
+    return { stored: false, state, reason: 'full' };
+  }
+
+  return {
+    stored: true,
+    state: {
+      ...state,
+      prepStationCellIndex: -1,
+      backpackItemIds: [...state.backpackItemIds, PREP_STATION_ID],
+      updatedAt: now
+    }
+  };
+}
+
 export function takeBackpackItemToBoard(
   state: GameState,
   slotIndex: number,
   now = Date.now()
 ): BackpackTakeResult {
-  const itemId = state.backpackItemIds[slotIndex];
-  if (!itemId) {
+  const storedId = state.backpackItemIds[slotIndex];
+  if (!storedId) {
     return { taken: false, state, cellIndex: -1, reason: 'empty_slot' };
   }
 
@@ -58,17 +79,21 @@ export function takeBackpackItemToBoard(
     return { taken: false, state, cellIndex: -1, reason: 'board_full' };
   }
 
+  const backpackItemIds = state.backpackItemIds.filter((_, index) => index !== slotIndex);
+  if (storedId === PREP_STATION_ID) {
+    return {
+      taken: true,
+      cellIndex: target.index,
+      state: { ...state, prepStationCellIndex: target.index, backpackItemIds, updatedAt: now }
+    };
+  }
+
   const board = state.board.map((cell) => ({ ...cell }));
-  board[target.index].itemId = itemId;
+  board[target.index].itemId = storedId;
 
   return {
     taken: true,
     cellIndex: target.index,
-    state: {
-      ...state,
-      board,
-      backpackItemIds: state.backpackItemIds.filter((_, index) => index !== slotIndex),
-      updatedAt: now
-    }
+    state: { ...state, board, backpackItemIds, updatedAt: now }
   };
 }

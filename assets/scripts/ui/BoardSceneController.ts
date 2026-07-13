@@ -15,11 +15,17 @@ import {
   Vec3,
   view
 } from 'cc';
-import { storeBoardItemInBackpack, takeBackpackItemToBoard } from '../core/backpack';
 import {
+  PREP_STATION_ID,
+  storeBoardItemInBackpack,
+  storePrepStationInBackpack,
+  takeBackpackItemToBoard
+} from '../core/backpack';
+import {
+  findEscapeCell,
   hasAvailableBoardCell,
-  moveBackpack,
   moveBoardItem,
+  moveFixture,
   spawnBasicItem,
   tryMerge
 } from '../core/board';
@@ -473,17 +479,24 @@ export class BoardSceneController extends Component {
 
     const targetIndex = this.findClosestCellIndex(this.prepStationNode.position);
     if (targetIndex === this.state.backpackCellIndex) {
-      this.snapPrepStationToCell();
-      this.showBoardNotice('背包占用此格');
+      const stored = storePrepStationInBackpack(this.state);
+      this.state = stored.stored ? stored.state : this.state;
+      this.renderBoardObjects();
+      this.persistState();
+      this.showBoardNotice(stored.stored ? '备料台已放入背包' : '背包已满');
       return;
     }
 
-    const result = moveBackpack(this.state.board, this.state.prepStationCellIndex, targetIndex, [
+    const result = moveFixture(
+      this.state.board,
+      this.state.prepStationCellIndex,
+      targetIndex,
       this.state.backpackCellIndex
-    ]);
+    );
     if (result.moved) {
       this.state.board = result.board;
-      this.state.prepStationCellIndex = result.backpackCellIndex;
+      this.state.prepStationCellIndex = result.fixtureCellIndex;
+      this.state.backpackCellIndex = result.otherFixtureCellIndex;
       this.persistState();
       this.renderBoardObjects();
       if (result.displaced) this.animateDisplacement(result.displaced);
@@ -528,17 +541,16 @@ export class BoardSceneController extends Component {
     }
 
     const targetIndex = this.findClosestCellIndex(this.backpackNode.position);
-    if (targetIndex === this.state.prepStationCellIndex) {
-      this.snapBackpackToCell();
-      this.showBoardNotice('备料台占用此格');
-      return;
-    }
-    const result = moveBackpack(this.state.board, this.state.backpackCellIndex, targetIndex, [
+    const result = moveFixture(
+      this.state.board,
+      this.state.backpackCellIndex,
+      targetIndex,
       this.state.prepStationCellIndex
-    ]);
+    );
     if (result.moved) {
       this.state.board = result.board;
-      this.state.backpackCellIndex = result.backpackCellIndex;
+      this.state.backpackCellIndex = result.fixtureCellIndex;
+      this.state.prepStationCellIndex = result.otherFixtureCellIndex;
       this.persistState();
       this.renderBoardObjects();
       if (result.displaced) this.animateDisplacement(result.displaced);
@@ -609,7 +621,11 @@ export class BoardSceneController extends Component {
         this.showBoardNotice(`合成：${upgradedItem?.name ?? '新食材'}`);
         return;
       }
-      if (targetIndex !== this.state.prepStationCellIndex) {
+      if (targetIndex === this.state.prepStationCellIndex) {
+        this.pushPrepStationAside(cellIndex);
+        return;
+      }
+      {
         const moved = moveBoardItem(this.state.board, cellIndex, targetIndex, [
           this.state.backpackCellIndex,
           this.state.prepStationCellIndex
@@ -645,11 +661,34 @@ export class BoardSceneController extends Component {
   }
 
   private animateSettle(cellIndex: number): void {
-    const node = this.boardObjects?.getChildByName(`Item${cellIndex}`);
+    const node = cellIndex === this.state.prepStationCellIndex
+      ? this.prepStationNode
+      : this.boardObjects?.getChildByName(`Item${cellIndex}`);
     if (!node) return;
 
     node.setScale(1.16, 1.16, 1);
     tween(node).to(0.2, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' }).start();
+  }
+
+  /** 食材压到备料台头上，备料台照样被顺时针挤开——它不比食材金贵。 */
+  private pushPrepStationAside(itemCellIndex: number): void {
+    const stationIndex = this.state.prepStationCellIndex;
+    const board = this.state.board.map((cell) => ({ ...cell }));
+    const itemId = board[itemCellIndex].itemId;
+    if (!itemId) {
+      this.renderBoardObjects();
+      return;
+    }
+
+    board[itemCellIndex].itemId = null;
+    const escapeIndex = findEscapeCell(board, stationIndex, itemCellIndex, [this.state.backpackCellIndex]);
+    board[stationIndex].itemId = itemId;
+
+    this.state.board = board;
+    this.state.prepStationCellIndex = escapeIndex;
+    this.persistState();
+    this.renderBoardObjects();
+    this.animateSettle(stationIndex);
   }
 
   private findClosestCellIndex(position: Readonly<Vec3>): number {
@@ -719,9 +758,17 @@ export class BoardSceneController extends Component {
         undefined,
         12
       );
-      const itemId = this.state.backpackItemIds[index];
-      if (!itemId) continue;
-      const item = this.itemConfigs.find((entry) => entry.id === itemId);
+      const storedId = this.state.backpackItemIds[index];
+      if (!storedId) continue;
+
+      if (storedId === PREP_STATION_ID) {
+        addPanel(cell, 'StoredItemColor', 0, 13, 64, 34, new Color(242, 183, 72), undefined, 10);
+        addText(cell, 'StoredItemName', '备料台', 0, -22, 90, 42, 16, new Color(91, 64, 55));
+        cell.on(Node.EventType.TOUCH_END, () => this.takeFromBackpack(index));
+        continue;
+      }
+
+      const item = this.itemConfigs.find((entry) => entry.id === storedId);
       if (!item) continue;
       addPanel(cell, 'StoredItemColor', 0, 13, 64, 34, this.getItemColor(item.chain), undefined, 10);
       addText(cell, 'StoredItemName', item.name, 0, -22, 90, 42, 16, new Color(91, 64, 55));
@@ -738,13 +785,17 @@ export class BoardSceneController extends Component {
       return;
     }
 
-    const item = this.itemConfigs.find((entry) => entry.id === this.state.backpackItemIds[slotIndex]);
+    const storedId = this.state.backpackItemIds[slotIndex];
+    const name = storedId === PREP_STATION_ID
+      ? '备料台'
+      : this.itemConfigs.find((entry) => entry.id === storedId)?.name ?? '食材';
+
     this.state = result.state;
     this.persistState();
     this.closeBackpackModal();
     this.renderBoardObjects();
     this.animateSettle(result.cellIndex);
-    this.showBoardNotice(`已取出：${item?.name ?? '食材'}`);
+    this.showBoardNotice(`已取出：${name}`);
   }
 
   private closeBackpackModal(): void {
@@ -753,22 +804,15 @@ export class BoardSceneController extends Component {
   }
 
   private showBoardNotice(message: string): void {
-    const existing = this.node.getChildByName('BackpackNotice');
+    const existing = this.node.getChildByName('BoardNotice');
     existing?.destroy();
-    const label = addText(
-      this.node,
-      'BackpackNotice',
-      message,
-      0,
-      -470,
-      280,
-      52,
-      24,
-      new Color(91, 64, 55)
-    );
-    label.node.setSiblingIndex(this.node.children.length - 1);
+
+    // 落在底部信息条那一格，别糊在棋盘格子上。
+    const banner = addPanel(this.node, 'BoardNotice', 90, -570, 540, 68, new Color(91, 64, 55), undefined, 12);
+    addText(banner, 'BoardNoticeText', message, 0, 0, 500, 52, 21, new Color(255, 249, 233));
+    banner.setSiblingIndex(this.node.children.length - 1);
     this.scheduleOnce(() => {
-      if (label.isValid) label.node.destroy();
+      if (banner.isValid) banner.destroy();
     }, 1.2);
   }
 }
