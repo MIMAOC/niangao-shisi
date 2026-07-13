@@ -1,4 +1,5 @@
 import type { GameState } from './types';
+import { INITIAL_BACKPACK_CAPACITY } from './backpack';
 
 const SAVE_VERSION = 1;
 
@@ -28,14 +29,28 @@ export function deserializeSave(payload: string): GameState {
       state.staminaAdDate = formatLocalDay(new Date(state.updatedAt));
       state.staminaAdViews = 0;
     }
+    if (typeof state.backpackCapacity !== 'number') {
+      state.backpackCapacity = INITIAL_BACKPACK_CAPACITY;
+    }
+    if (!Array.isArray(state.backpackItemIds)) {
+      state.backpackItemIds = [];
+    }
     const savedIndex = state.backpackCellIndex;
     const savedCell = state.board[savedIndex];
-    if (savedCell?.itemId === null) {
-      return state;
+    if (savedCell?.itemId !== null) {
+      const emptyCell = [...state.board].reverse().find((cell) => cell.itemId === null);
+      state.backpackCellIndex = emptyCell?.index ?? -1;
     }
 
-    const emptyCell = [...state.board].reverse().find((cell) => cell.itemId === null);
-    return { ...state, backpackCellIndex: emptyCell?.index ?? -1 };
+    const prepStationIndex = state.prepStationCellIndex;
+    const prepStationCell = state.board[prepStationIndex];
+    if (prepStationCell?.itemId !== null || prepStationIndex === state.backpackCellIndex) {
+      const emptyCell = [...state.board]
+        .reverse()
+        .find((cell) => cell.itemId === null && cell.index !== state.backpackCellIndex);
+      state.prepStationCellIndex = emptyCell?.index ?? -1;
+    }
+    return state;
   } catch {
     throw new Error('Invalid save payload');
   }

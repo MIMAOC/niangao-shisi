@@ -110,6 +110,9 @@ export interface ActiveOrder {
 export interface GameState {
   board: BoardCell[];
   backpackCellIndex: number;
+  backpackCapacity: number;
+  backpackItemIds: ItemId[];
+  prepStationCellIndex: number;
   activeOrders: ActiveOrder[];
   coins: number;
   premiumIngots: number;

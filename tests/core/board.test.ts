@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createBoard, moveBackpack, spawnBasicItem, tryMerge } from '../../assets/scripts/core/board';
+import {
+  createBoard,
+  hasAvailableBoardCell,
+  moveBoardItem,
+  moveBackpack,
+  spawnBasicItem,
+  tryMerge
+} from '../../assets/scripts/core/board';
 import { createInitialGameState } from '../../assets/scripts/core/gameState';
 import type { ItemConfig } from '../../assets/scripts/core/types';
 
@@ -28,6 +35,15 @@ describe('board', () => {
     board[0].itemId = 'rice_1';
 
     expect(() => spawnBasicItem(board, 'rice_1', 1)).toThrow('Board is full');
+  });
+
+  it('requires an unreserved empty cell before a prep station can generate an item', () => {
+    const board = createBoard(3);
+    board[1].itemId = 'rice_1';
+    board[2].itemId = 'rice_1';
+
+    expect(hasAvailableBoardCell(board, [0])).toBe(false);
+    expect(hasAvailableBoardCell(board, [1])).toBe(true);
   });
 
   it('moves the backpack to an empty cell', () => {
@@ -76,5 +92,40 @@ describe('board', () => {
     expect(result.merged).toBe(true);
     expect(result.board[1].itemId).toBe('rice_2');
     expect(result.board[0].itemId).toBeNull();
+  });
+
+  it('does not merge an item with itself after a short drag', () => {
+    const board = createBoard();
+    board[0].itemId = 'rice_1';
+
+    const result = tryMerge(board, 0, 0, items);
+
+    expect(result.merged).toBe(false);
+    expect(result.board[0].itemId).toBe('rice_1');
+  });
+
+  it('moves an item to an empty target cell', () => {
+    const board = createBoard();
+    board[0].itemId = 'rice_1';
+
+    const result = moveBoardItem(board, 0, 8);
+
+    expect(result.moved).toBe(true);
+    expect(result.board[0].itemId).toBeNull();
+    expect(result.board[8].itemId).toBe('rice_1');
+  });
+
+  it('pushes a different target item to the nearest available cell', () => {
+    const board = createBoard();
+    board[0].itemId = 'rice_1';
+    board[8].itemId = 'tea_1';
+    board[1].itemId = 'rice_2';
+    board[7].itemId = 'rice_2';
+
+    const result = moveBoardItem(board, 0, 8);
+
+    expect(result.moved).toBe(true);
+    expect(result.board[8].itemId).toBe('rice_1');
+    expect(result.board[9].itemId).toBe('tea_1');
   });
 });

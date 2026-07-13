@@ -32,6 +32,28 @@ describe('save', () => {
     expect(restored.backpackCellIndex).toBe(62);
   });
 
+  it('adds a prep station position when loading an old save', () => {
+    const state = createInitialGameState(1000);
+    const { prepStationCellIndex: _prepStationCellIndex, ...oldState } = state;
+    const restored = deserializeSave(JSON.stringify({ version: 1, state: oldState }));
+
+    expect(restored.prepStationCellIndex).not.toBe(restored.backpackCellIndex);
+    expect(restored.board[restored.prepStationCellIndex].itemId).toBeNull();
+  });
+
+  it('initializes ten empty backpack slots when loading a pre-storage save', () => {
+    const state = createInitialGameState(1000);
+    const {
+      backpackCapacity: _backpackCapacity,
+      backpackItemIds: _backpackItemIds,
+      ...oldState
+    } = state;
+    const restored = deserializeSave(JSON.stringify({ version: 1, state: oldState }));
+
+    expect(restored.backpackCapacity).toBe(10);
+    expect(restored.backpackItemIds).toEqual([]);
+  });
+
   it('finds an empty cell when the saved backpack position contains an item', () => {
     const state = createInitialGameState(1000);
     state.board[62].itemId = 'rice_1';

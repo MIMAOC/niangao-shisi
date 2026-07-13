@@ -8,6 +8,8 @@ describe('game state', () => {
     expect(state.premiumIngots).toBe(0);
     expect(state.coins).toBe(0);
     expect(state.stamina).toBe(100);
+    expect(state.prepStationCellIndex).not.toBe(state.backpackCellIndex);
+    expect(state.board[state.prepStationCellIndex].itemId).toBeNull();
   });
 
   it('adds coins without mutating original state', () => {

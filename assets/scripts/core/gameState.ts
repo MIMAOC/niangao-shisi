@@ -1,5 +1,6 @@
 import type { CurrencyCode, CustomerType, GameState } from './types';
 import { createBoard } from './board';
+import { INITIAL_BACKPACK_CAPACITY } from './backpack';
 
 const customerTypes: CustomerType[] = [
   'student',
@@ -15,6 +16,9 @@ export function createInitialGameState(now = Date.now()): GameState {
   return {
     board: createBoard(),
     backpackCellIndex: 62,
+    backpackCapacity: INITIAL_BACKPACK_CAPACITY,
+    backpackItemIds: [],
+    prepStationCellIndex: 61,
     activeOrders: [],
     coins: 0,
     premiumIngots: 0,

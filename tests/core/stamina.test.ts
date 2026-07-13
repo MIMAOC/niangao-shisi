@@ -4,6 +4,7 @@ import {
   claimStaminaAd,
   getStaminaRecoveryRemainingMs,
   recoverStamina,
+  spendStamina,
   STAMINA_AD_DAILY_LIMIT,
   STAMINA_AD_REWARD,
   STAMINA_MAX,
@@ -74,5 +75,16 @@ describe('stamina', () => {
     };
 
     expect(claimStaminaAd(state, new Date('2026-07-13T10:00:00')).granted).toBe(false);
+  });
+
+  it('spends stamina only when the player has enough for the action', () => {
+    const state = { ...createInitialGameState(0), stamina: 2 };
+    const spent = spendStamina(state, 1, 1_000);
+    const blocked = spendStamina({ ...state, stamina: 0 }, 1, 1_000);
+
+    expect(spent.spent).toBe(true);
+    expect(spent.state.stamina).toBe(1);
+    expect(blocked.spent).toBe(false);
+    expect(blocked.state.stamina).toBe(0);
   });
 });
