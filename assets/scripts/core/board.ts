@@ -9,7 +9,8 @@ export interface MergeResult {
 export interface BackpackMoveResult {
   moved: boolean;
   backpackCellIndex: number;
-  reason?: 'invalid_index' | 'occupied_target';
+  board: BoardCell[];
+  reason?: 'invalid_index';
 }
 
 export function createBoard(size = 63): BoardCell[] {
@@ -34,14 +35,40 @@ export function moveBackpack(
   toIndex: number
 ): BackpackMoveResult {
   if (!board[fromIndex] || !board[toIndex]) {
-    return { moved: false, backpackCellIndex: fromIndex, reason: 'invalid_index' };
+    return { moved: false, backpackCellIndex: fromIndex, board, reason: 'invalid_index' };
   }
 
-  if (board[toIndex].itemId !== null) {
-    return { moved: false, backpackCellIndex: fromIndex, reason: 'occupied_target' };
+  const next = board.map((cell) => ({ ...cell }));
+  const targetItemId = next[toIndex].itemId;
+  if (targetItemId !== null) {
+    const emptyIndex = findNearestEmptyCell(next, toIndex);
+    if (emptyIndex === -1) {
+      return { moved: false, backpackCellIndex: fromIndex, board };
+    }
+    next[emptyIndex].itemId = targetItemId;
+    next[toIndex].itemId = null;
   }
 
-  return { moved: true, backpackCellIndex: toIndex };
+  return { moved: true, backpackCellIndex: toIndex, board: next };
+}
+
+function findNearestEmptyCell(board: BoardCell[], targetIndex: number, columnCount = 7): number {
+  const targetRow = Math.floor(targetIndex / columnCount);
+  const targetColumn = targetIndex % columnCount;
+
+  return board
+    .filter((cell) => cell.itemId === null && cell.index !== targetIndex)
+    .sort((left, right) => {
+      const leftDistance = gridDistance(left.index, targetRow, targetColumn, columnCount);
+      const rightDistance = gridDistance(right.index, targetRow, targetColumn, columnCount);
+      return leftDistance - rightDistance || left.index - right.index;
+    })[0]?.index ?? -1;
+}
+
+function gridDistance(index: number, targetRow: number, targetColumn: number, columnCount: number): number {
+  const row = Math.floor(index / columnCount);
+  const column = index % columnCount;
+  return (row - targetRow) ** 2 + (column - targetColumn) ** 2;
 }
 
 export function tryMerge(

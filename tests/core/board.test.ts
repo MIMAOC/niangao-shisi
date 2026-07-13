@@ -37,15 +37,33 @@ describe('board', () => {
     expect(result.backpackCellIndex).toBe(10);
   });
 
-  it('keeps the backpack in place when the target contains an item', () => {
+  it('pushes an occupied target item into the nearest available cell', () => {
     const board = createBoard();
+    board[10].itemId = 'rice_1';
+    board[3].itemId = 'rice_2';
+    board[9].itemId = 'rice_2';
+
+    const result = moveBackpack(board, 62, 10);
+
+    expect(result.moved).toBe(true);
+    expect(result.backpackCellIndex).toBe(10);
+    expect(result.board[11].itemId).toBe('rice_1');
+    expect(result.board[10].itemId).toBeNull();
+  });
+
+  it('swaps the backpack with the target item when every other cell is full', () => {
+    const board = createBoard();
+    board.forEach((cell) => {
+      if (cell.index !== 62) cell.itemId = 'rice_2';
+    });
     board[10].itemId = 'rice_1';
 
     const result = moveBackpack(board, 62, 10);
 
-    expect(result.moved).toBe(false);
-    expect(result.backpackCellIndex).toBe(62);
-    expect(result.reason).toBe('occupied_target');
+    expect(result.moved).toBe(true);
+    expect(result.backpackCellIndex).toBe(10);
+    expect(result.board[10].itemId).toBeNull();
+    expect(result.board[62].itemId).toBe('rice_1');
   });
 
   it('merges identical items into next level', () => {

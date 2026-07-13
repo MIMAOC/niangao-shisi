@@ -48,6 +48,23 @@ describe('save', () => {
     expect('healingPoints' in restored).toBe(false);
   });
 
+  it('uses the save timestamp when an old save has no stamina recovery timestamp', () => {
+    const state = createInitialGameState(1000);
+    const { staminaUpdatedAt: _staminaUpdatedAt, ...oldState } = state;
+    const restored = deserializeSave(JSON.stringify({ version: 1, state: oldState }));
+
+    expect(restored.staminaUpdatedAt).toBe(1000);
+  });
+
+  it('initializes the daily ad counter when loading a pre-ad save', () => {
+    const state = createInitialGameState(1000);
+    const { staminaAdDate: _staminaAdDate, staminaAdViews: _staminaAdViews, ...oldState } = state;
+    const restored = deserializeSave(JSON.stringify({ version: 1, state: oldState }));
+
+    expect(restored.staminaAdDate).toBe('1970-01-01');
+    expect(restored.staminaAdViews).toBe(0);
+  });
+
   it('throws on invalid save payload', () => {
     expect(() => deserializeSave('{bad json')).toThrow('Invalid save payload');
   });

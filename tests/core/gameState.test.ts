@@ -7,7 +7,7 @@ describe('game state', () => {
 
     expect(state.premiumIngots).toBe(0);
     expect(state.coins).toBe(0);
-    expect(state.stamina).toBe(60);
+    expect(state.stamina).toBe(100);
   });
 
   it('adds coins without mutating original state', () => {

@@ -115,6 +115,9 @@ export interface GameState {
   premiumIngots: number;
   experience: number;
   stamina: number;
+  staminaUpdatedAt: number;
+  staminaAdDate: string;
+  staminaAdViews: number;
   shopLevel: number;
   petStageId: PetStageConfig['id'];
   petIntimacy: number;
