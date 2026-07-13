@@ -1,4 +1,5 @@
 import { getFoodHealingValue } from './customerHealing';
+import { pickOne } from './random';
 import type {
   ActiveOrder,
   CustomerHealingConfig,
@@ -14,7 +15,8 @@ export function completeOrder(
   state: GameState,
   order: OrderConfig,
   deliveredItemId: ItemId,
-  healingConfig: CustomerHealingConfig
+  healingConfig: CustomerHealingConfig,
+  now = Date.now()
 ): GameState {
   const healingValue = getFoodHealingValue(order.customerType, deliveredItemId, healingConfig);
   return {
@@ -25,7 +27,7 @@ export function completeOrder(
       ...state.customerHealingByType,
       [order.customerType]: state.customerHealingByType[order.customerType] + healingValue
     },
-    updatedAt: Date.now()
+    updatedAt: now
   };
 }
 
@@ -95,11 +97,6 @@ function pickDifficulty(value: number): OrderDifficulty {
   if (value < 0.5) return 'easy';
   if (value < 0.85) return 'normal';
   return 'hard';
-}
-
-function pickOne<T>(values: T[], random: () => number): T | null {
-  if (values.length === 0) return null;
-  return values[Math.min(Math.floor(random() * values.length), values.length - 1)];
 }
 
 function isOrderUnlocked(order: OrderConfig, unlocked: string[]): boolean {

@@ -7,7 +7,8 @@ export type FeedPetResult =
 export function feedPet(
   state: GameState,
   food: PetFoodConfig,
-  stage: PetStageConfig
+  stage: PetStageConfig,
+  now = Date.now()
 ): FeedPetResult {
   if (!food.allowedStages.includes(stage.id) || !stage.acceptedFoodIds.includes(food.id)) {
     return { ok: false, state, reason: 'wrong_food' };
@@ -23,12 +24,16 @@ export function feedPet(
       ...state,
       coins: state.coins - food.priceCoins,
       petIntimacy: state.petIntimacy + food.intimacyGain,
-      updatedAt: Date.now()
+      updatedAt: now
     }
   };
 }
 
-export function syncPetStage(state: GameState, petStages: PetStageConfig[]): GameState {
+export function syncPetStage(
+  state: GameState,
+  petStages: PetStageConfig[],
+  now = Date.now()
+): GameState {
   const unlockedStages = petStages
     .filter((stage) => state.shopLevel >= stage.unlockShopLevel)
     .sort((a, b) => b.unlockShopLevel - a.unlockShopLevel);
@@ -40,6 +45,6 @@ export function syncPetStage(state: GameState, petStages: PetStageConfig[]): Gam
   return {
     ...state,
     petStageId: unlockedStages[0].id,
-    updatedAt: Date.now()
+    updatedAt: now
   };
 }

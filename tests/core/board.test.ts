@@ -4,6 +4,7 @@ import {
   hasAvailableBoardCell,
   moveBoardItem,
   moveFixture,
+  placeItemOnFixtureCell,
   spawnBasicItem,
   tryMerge
 } from '../../assets/scripts/core/board';
@@ -238,5 +239,53 @@ describe('board', () => {
     expect(result.moved).toBe(true);
     expect(result.board[1].itemId).toBe('rice_1');
     expect(result.board[0].itemId).toBe('tea_1');
+  });
+});
+
+describe('placing an item on a fixture cell', () => {
+  it('takes over the fixture cell and pushes the fixture clockwise', () => {
+    const board = createBoard();
+    board[10].itemId = 'rice_1';
+
+    // 备料台占着 8 号格，食材从 10 号格压上来。
+    const result = placeItemOnFixtureCell(board, 10, 8);
+
+    expect(result.moved).toBe(true);
+    expect(result.board[8].itemId).toBe('rice_1');
+    expect(result.board[10].itemId).toBeNull();
+    // 从正上方顺时针找第一个空格：1 号格。
+    expect(result.fixtureCellIndex).toBe(1);
+  });
+
+  it('never pushes the fixture onto a reserved cell', () => {
+    const board = createBoard();
+    board[10].itemId = 'rice_1';
+
+    const result = placeItemOnFixtureCell(board, 10, 8, [1]);
+
+    expect(result.moved).toBe(true);
+    expect(result.fixtureCellIndex).not.toBe(1);
+  });
+
+  it('falls back to the source cell when the board is otherwise full', () => {
+    const board = createBoard();
+    board.forEach((cell) => {
+      cell.itemId = 'rice_2';
+    });
+    board[8].itemId = null;
+    board[10].itemId = 'rice_1';
+
+    const result = placeItemOnFixtureCell(board, 10, 8);
+
+    expect(result.moved).toBe(true);
+    expect(result.board[8].itemId).toBe('rice_1');
+    expect(result.fixtureCellIndex).toBe(10);
+  });
+
+  it('rejects an empty source cell', () => {
+    const result = placeItemOnFixtureCell(createBoard(), 10, 8);
+
+    expect(result.moved).toBe(false);
+    expect(result.reason).toBe('empty_source');
   });
 });

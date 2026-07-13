@@ -101,6 +101,26 @@ describe('save', () => {
     expect(() => deserializeSave('{bad json')).toThrow('Invalid save payload');
   });
 
+  it('throws when the saved board is not the expected size, instead of silently misaligning cells', () => {
+    const state = { ...createInitialGameState(1000), board: createInitialGameState(1000).board.slice(0, 40) };
+
+    expect(() => deserializeSave(JSON.stringify({ version: 1, state }))).toThrow('Invalid save payload');
+  });
+
+  it('keeps the daily premium purchase date across a save round trip', () => {
+    const restored = deserializeSave(serializeSave(createInitialGameState(1000)));
+
+    expect(restored.premiumPurchaseDate).toBe('1970-01-01');
+  });
+
+  it('backfills the premium purchase date for a pre-limit save', () => {
+    const state = createInitialGameState(1000);
+    const { premiumPurchaseDate: _premiumPurchaseDate, ...oldState } = state;
+    const restored = deserializeSave(JSON.stringify({ version: 1, state: oldState }));
+
+    expect(restored.premiumPurchaseDate).toBe('1970-01-01');
+  });
+
   it('throws on unsupported save version', () => {
     const payload = JSON.stringify({ version: 2, state: createInitialGameState(1000) });
 

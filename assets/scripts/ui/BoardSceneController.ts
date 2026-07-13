@@ -1,18 +1,12 @@
 import {
   _decorator,
-  Color,
   Component,
   director,
-  EventTouch,
-  JsonAsset,
   Node,
   ResolutionPolicy,
-  resources,
-  sys,
-  tween,
   UITransform,
-  Vec2,
   Vec3,
+  tween,
   view
 } from 'cc';
 import {
@@ -22,59 +16,58 @@ import {
   takeBackpackItemToBoard
 } from '../core/backpack';
 import {
-  findEscapeCell,
+  BOARD_COLUMNS,
+  BOARD_ROWS,
   hasAvailableBoardCell,
   moveBoardItem,
   moveFixture,
+  placeItemOnFixtureCell,
   spawnBasicItem,
   tryMerge
 } from '../core/board';
 import type { DisplacedItem } from '../core/board';
-import { getFoodHealingValue } from '../core/customerHealing';
+import { tryGetFoodHealingValue } from '../core/customerHealing';
 import { createInitialGameState } from '../core/gameState';
+import { rollBasicItem } from '../core/items';
 import { createOrderQueue } from '../core/orders';
-import { deserializeSave, serializeSave } from '../core/save';
-import { claimStaminaAd, recoverStamina, spendStamina } from '../core/stamina';
+import { recoverStamina, claimStaminaAd, spendStamina } from '../core/stamina';
 import type { CustomerHealingConfig, GameState, ItemConfig, ItemId, OrderConfig } from '../core/types';
+import { makeDraggable } from './dragging';
+import { loadGameState, loadJsonConfig, saveGameState } from './gameStore';
+import { getItemColor, palette } from './theme';
 import { addButton, addPanel, addText } from './UiKit';
 import { StatusBarView } from './StatusBarView';
 
 const { ccclass } = _decorator;
-const saveKey = 'niangao-shisi-save';
-const selectedBorderColor = new Color(255, 239, 152);
 
-const emptyHealingConfig: CustomerHealingConfig = {
-  levelRequirements: [100, 220, 400, 650, 1000, 1500, 2200, 3100, 4200],
+const CELL_SIZE = 90;
+const CELL_GAP = 4;
+const BOARD_PADDING = 10;
+const ITEM_SIZE = 82;
+/** 松手点离最近格子超过一格远，就当没落在棋盘上，弹回原位。 */
+const DROP_MAX_DISTANCE = CELL_SIZE;
+
+/** 治愈配置没加载出来时的占位。真值全在 config/customer_healing.json 里，这里不留副本。 */
+const EMPTY_HEALING_CONFIG: CustomerHealingConfig = Object.freeze({
+  levelRequirements: [],
   customers: {}
-};
+});
 
 @ccclass('BoardSceneController')
 export class BoardSceneController extends Component {
   private state: GameState = createInitialGameState();
   private orderConfigs: OrderConfig[] = [];
   private itemConfigs: ItemConfig[] = [];
-  private healingConfig: CustomerHealingConfig = emptyHealingConfig;
+  private healingConfig: CustomerHealingConfig = EMPTY_HEALING_CONFIG;
   private statusBar: StatusBarView | null = null;
   private readonly cellPositions: Vec3[] = [];
   private contentRoot: Node | null = null;
   private boardFrame: Node | null = null;
   private boardObjects: Node | null = null;
-  private backpackNode: Node | null = null;
   private backpackModal: Node | null = null;
   private selectionInfo: Node | null = null;
   private selectedCellIndex = -1;
   private prepStationNode: Node | null = null;
-  private backpackStartTouch = new Vec2();
-  private backpackStartPosition = new Vec3();
-  private backpackDragging = false;
-  private draggedItemNode: Node | null = null;
-  private draggedItemIndex = -1;
-  private itemStartTouch = new Vec2();
-  private itemStartPosition = new Vec3();
-  private itemDragging = false;
-  private prepStationStartTouch = new Vec2();
-  private prepStationStartPosition = new Vec3();
-  private prepStationDragging = false;
 
   onLoad(): void {
     view.setDesignResolutionSize(750, 1334, ResolutionPolicy.FIXED_WIDTH);
@@ -92,49 +85,37 @@ export class BoardSceneController extends Component {
 
   private async initializeScene(): Promise<void> {
     try {
-      [this.orderConfigs, this.itemConfigs] = await Promise.all([
-        this.loadJson<OrderConfig[]>('config/orders'),
-        this.loadJson<ItemConfig[]>('config/items')
+      [this.orderConfigs, this.itemConfigs, this.healingConfig] = await Promise.all([
+        loadJsonConfig<OrderConfig[]>('config/orders'),
+        loadJsonConfig<ItemConfig[]>('config/items'),
+        loadJsonConfig<CustomerHealingConfig>('config/customer_healing')
       ]);
-      this.healingConfig = await this.loadJson<CustomerHealingConfig>('config/customer_healing');
-      this.restoreState();
-      this.state = recoverStamina(this.state);
-      if (this.state.activeOrders.length === 0) {
-        this.state.activeOrders = createOrderQueue(this.orderConfigs, this.state.unlocked);
-        this.persistState();
-      }
-      this.buildScene();
     } catch (error) {
-      console.error('Failed to initialize board orders', error);
+      console.error('Failed to load board configs', error);
+      return;
     }
+
+    this.state = recoverStamina(loadGameState());
+    if (this.state.activeOrders.length === 0) {
+      this.state = { ...this.state, activeOrders: this.createOrders() };
+      this.persistState();
+    }
+    this.buildScene();
   }
 
-  private loadJson<T>(path: string): Promise<T> {
-    return new Promise((resolve, reject) => {
-      resources.load(path, JsonAsset, (error, asset) => {
-        if (error || !asset) {
-          reject(error ?? new Error(`Missing resource: ${path}`));
-          return;
-        }
-        resolve(asset.json as T);
-      });
-    });
-  }
-
-  private restoreState(): void {
-    const saved = sys.localStorage.getItem(saveKey);
-    if (!saved) return;
-
+  /** 订单池不够开一桌不该让整个场景打不开——先空着，让玩家至少能合成。 */
+  private createOrders(): GameState['activeOrders'] {
     try {
-      this.state = deserializeSave(saved);
-    } catch {
-      sys.localStorage.removeItem(saveKey);
+      return createOrderQueue(this.orderConfigs, this.state.unlocked);
+    } catch (error) {
+      console.error('Failed to create the order queue', error);
+      return [];
     }
   }
 
   private persistState(): void {
     this.state = recoverStamina(this.state);
-    sys.localStorage.setItem(saveKey, serializeSave(this.state));
+    saveGameState(this.state);
   }
 
   private buildScene(): void {
@@ -144,26 +125,26 @@ export class BoardSceneController extends Component {
     root.addComponent(UITransform).setContentSize(750, 1334);
     this.contentRoot = root;
 
-    addPanel(root, 'PaperBackground', 0, 0, 750, 1334, new Color(247, 232, 197), undefined, 0);
+    addPanel(root, 'PaperBackground', 0, 0, 750, 1334, palette.paper, undefined, 0);
     this.statusBar = root.addComponent(StatusBarView);
     this.renderStatusBar();
     this.schedule(this.refreshStamina, 1);
-    addText(root, 'BoardTitle', '今日营业', 0, 500, 300, 54, 32, new Color(91, 64, 55));
+    addText(root, 'BoardTitle', '今日营业', 0, 500, 300, 54, 32, palette.ink);
 
     this.buildOrders(root);
     this.buildBoard(root);
 
-    addButton(root, 'HomeButton', '返回食肆', -285, -570, 160, 68, new Color(102, 145, 190), () => this.returnHomeScene());
+    addButton(root, 'HomeButton', '返回食肆', -285, -570, 160, 68, palette.blue, () => this.returnHomeScene());
   }
 
   private buildOrders(root: Node): void {
     const ordersById = new Map(this.orderConfigs.map((order) => [order.id, order]));
     const itemsById = new Map(this.itemConfigs.map((item) => [item.id, item]));
-    const colors = [new Color(255, 248, 225), new Color(238, 246, 232), new Color(247, 226, 220)];
 
     this.state.activeOrders.forEach((activeOrder, index) => {
       const order = ordersById.get(activeOrder.orderId);
       if (!order) return;
+
       const card = addPanel(
         root,
         `OrderCard${index + 1}`,
@@ -171,19 +152,33 @@ export class BoardSceneController extends Component {
         414,
         210,
         104,
-        colors[index % colors.length],
-        new Color(119, 83, 65),
+        palette.orderCards[index % palette.orderCards.length],
+        palette.orderCardStroke,
         8
       );
-      const itemName = order.requiredItemId === 'any_level_3'
+
+      const isWildcard = order.requiredItemId === 'any_level_3';
+      const itemName = isWildcard
         ? '任意三级菜品'
         : itemsById.get(order.requiredItemId)?.name ?? order.requiredItemId;
-      const healing = order.requiredItemId === 'any_level_3'
-        ? 0
-        : getFoodHealingValue(order.customerType, order.requiredItemId, this.healingConfig);
-      addText(card, 'OrderItemText', `需要：${itemName}`, 0, 22, 180, 30, 19, new Color(176, 82, 67));
-      addText(card, 'CoinRewardText', `金币 +${order.rewards.coins}`, -48, -20, 90, 30, 16, new Color(177, 118, 37));
-      addText(card, 'HealingRewardText', `治愈 +${healing}`, 52, -20, 100, 30, 16, new Color(200, 86, 92));
+      // 配置缺一条治愈值不该拖垮整个场景，显示成 — 就好。
+      const healing = isWildcard
+        ? null
+        : tryGetFoodHealingValue(order.customerType, order.requiredItemId, this.healingConfig);
+
+      addText(card, 'OrderItemText', `需要：${itemName}`, 0, 22, 180, 30, 19, palette.orderItemText);
+      addText(card, 'CoinRewardText', `金币 +${order.rewards.coins}`, -48, -20, 90, 30, 16, palette.coinRewardText);
+      addText(
+        card,
+        'HealingRewardText',
+        `治愈 +${healing ?? '—'}`,
+        52,
+        -20,
+        100,
+        30,
+        16,
+        palette.healingRewardText
+      );
     });
   }
 
@@ -197,20 +192,17 @@ export class BoardSceneController extends Component {
   }
 
   private claimStaminaAd(): void {
-    this.state = recoverStamina(this.state);
-    const result = claimStaminaAd(this.state);
+    const result = claimStaminaAd(recoverStamina(this.state));
     if (!result.granted) return;
+
     this.state = result.state;
     this.persistState();
     this.renderStatusBar();
   }
 
   private buildBoard(root: Node): void {
-    const cellSize = 90;
-    const gap = 4;
-    const padding = 10;
-    const totalWidth = cellSize * 7 + gap * 6;
-    const totalHeight = cellSize * 9 + gap * 8;
+    const totalWidth = CELL_SIZE * BOARD_COLUMNS + CELL_GAP * (BOARD_COLUMNS - 1);
+    const totalHeight = CELL_SIZE * BOARD_ROWS + CELL_GAP * (BOARD_ROWS - 1);
 
     // 框的尺寸跟着格子算，四边留一样宽的边，写死尺寸会让左右边框比上下粗一截。
     const frame = addPanel(
@@ -218,22 +210,22 @@ export class BoardSceneController extends Component {
       'BoardFrame',
       0,
       -90,
-      totalWidth + padding * 2,
-      totalHeight + padding * 2,
-      new Color(239, 221, 193),
+      totalWidth + BOARD_PADDING * 2,
+      totalHeight + BOARD_PADDING * 2,
+      palette.boardFrame,
       undefined,
       8
     );
     this.boardFrame = frame;
-    const startX = -totalWidth / 2 + cellSize / 2;
-    const startY = totalHeight / 2 - cellSize / 2;
 
-    for (let row = 0; row < 9; row += 1) {
-      for (let column = 0; column < 7; column += 1) {
-        const index = row * 7 + column;
+    const startX = -totalWidth / 2 + CELL_SIZE / 2;
+    const startY = totalHeight / 2 - CELL_SIZE / 2;
+    for (let row = 0; row < BOARD_ROWS; row += 1) {
+      for (let column = 0; column < BOARD_COLUMNS; column += 1) {
+        const index = row * BOARD_COLUMNS + column;
         const position = new Vec3(
-          startX + column * (cellSize + gap),
-          startY - row * (cellSize + gap)
+          startX + column * (CELL_SIZE + CELL_GAP),
+          startY - row * (CELL_SIZE + CELL_GAP)
         );
         this.cellPositions[index] = position;
         addPanel(
@@ -241,9 +233,9 @@ export class BoardSceneController extends Component {
           `BoardCell${index}`,
           position.x,
           position.y,
-          cellSize,
-          cellSize,
-          new Color(255, 249, 233),
+          CELL_SIZE,
+          CELL_SIZE,
+          palette.boardCell,
           undefined,
           6
         );
@@ -261,11 +253,12 @@ export class BoardSceneController extends Component {
     this.boardFrame.addChild(objects);
     objects.layer = this.boardFrame.layer;
     this.boardObjects = objects;
-    this.backpackNode = null;
     this.prepStationNode = null;
 
     this.state.board.forEach((cell) => {
-      if (!cell.itemId || cell.index === this.state.backpackCellIndex || cell.index === this.state.prepStationCellIndex) return;
+      if (!cell.itemId || cell.index === this.state.backpackCellIndex || cell.index === this.state.prepStationCellIndex) {
+        return;
+      }
       this.buildItem(objects, cell.index, cell.itemId);
     });
     this.buildPrepStation(objects);
@@ -283,23 +276,22 @@ export class BoardSceneController extends Component {
       `Item${cellIndex}`,
       position.x,
       position.y,
-      82,
-      82,
-      this.getItemColor(item.chain),
-      this.selectedCellIndex === cellIndex ? selectedBorderColor : undefined,
+      ITEM_SIZE,
+      ITEM_SIZE,
+      getItemColor(item.chain),
+      this.selectedCellIndex === cellIndex ? palette.selected : undefined,
       14
     );
-    addText(itemNode, 'ItemName', item.name, 0, 0, 72, 58, 18, new Color(91, 64, 55));
-    itemNode.on(Node.EventType.TOUCH_START, (event: EventTouch) => this.onItemTouchStart(itemNode, cellIndex, event));
-    itemNode.on(Node.EventType.TOUCH_MOVE, (event: EventTouch) => this.onItemTouchMove(itemNode, event));
-    itemNode.on(Node.EventType.TOUCH_END, () => this.onItemTouchEnd(itemNode, cellIndex));
-    itemNode.on(Node.EventType.TOUCH_CANCEL, () => this.onItemTouchEnd(itemNode, cellIndex));
-  }
+    addText(itemNode, 'ItemName', item.name, 0, 0, 72, 58, 18, palette.ink);
 
-  private getItemColor(chain: ItemConfig['chain']): Color {
-    if (chain === 'tea') return new Color(161, 211, 185);
-    if (chain === 'sweet_potato') return new Color(241, 178, 132);
-    return new Color(248, 218, 132);
+    makeDraggable(itemNode, {
+      onDragStart: () => {
+        // 拖动中不能重建棋盘，否则手上这个节点会被销毁；等落子时统一重绘。
+        this.selectedCellIndex = -1;
+      },
+      onTap: () => this.toggleSelection(cellIndex, () => this.clearSelection()),
+      onDrop: (node) => this.dropItem(node, cellIndex)
+    });
   }
 
   private buildPrepStation(parent: Node): void {
@@ -311,39 +303,49 @@ export class BoardSceneController extends Component {
       'PrepStation',
       position.x,
       position.y,
-      82,
-      82,
-      new Color(242, 183, 72),
-      this.selectedCellIndex === this.state.prepStationCellIndex ? selectedBorderColor : new Color(190, 129, 49),
+      ITEM_SIZE,
+      ITEM_SIZE,
+      palette.prepStation,
+      this.selectedCellIndex === this.state.prepStationCellIndex ? palette.selected : palette.prepStationStroke,
       14
     );
-    addText(prepStation, 'PrepStationLabel', '备料台\n-1体力', 0, 0, 74, 62, 17, new Color(91, 64, 55));
-    prepStation.on(Node.EventType.TOUCH_START, this.onPrepStationTouchStart, this);
-    prepStation.on(Node.EventType.TOUCH_MOVE, this.onPrepStationTouchMove, this);
-    prepStation.on(Node.EventType.TOUCH_END, this.onPrepStationTouchEnd, this);
-    prepStation.on(Node.EventType.TOUCH_CANCEL, this.onPrepStationTouchEnd, this);
+    addText(prepStation, 'PrepStationLabel', '备料台\n-1体力', 0, 0, 74, 62, 17, palette.ink);
     this.prepStationNode = prepStation;
+
+    makeDraggable(prepStation, {
+      onDragStart: () => {
+        this.selectedCellIndex = -1;
+      },
+      onTap: () => this.toggleSelection(this.state.prepStationCellIndex, () => this.generateFromPrepStation()),
+      onDrop: (node) => this.dropPrepStation(node)
+    });
   }
 
-  private buildBackpack(frame: Node): void {
+  private buildBackpack(parent: Node): void {
+    // 棋盘塞满时存档会把设施位置写成 -1，这里没有格子可站，先不画。
     const position = this.cellPositions[this.state.backpackCellIndex];
+    if (!position) return;
+
     const backpack = addPanel(
-      frame,
+      parent,
       'BoardBackpack',
       position.x,
       position.y,
-      82,
-      82,
-      new Color(91, 166, 126),
-      this.selectedCellIndex === this.state.backpackCellIndex ? selectedBorderColor : new Color(64, 112, 86),
+      ITEM_SIZE,
+      ITEM_SIZE,
+      palette.backpack,
+      this.selectedCellIndex === this.state.backpackCellIndex ? palette.selected : palette.backpackStroke,
       6
     );
-    addText(backpack, 'BackpackLabel', '背包', 0, 0, 74, 58, 24, new Color(255, 252, 240));
-    backpack.on(Node.EventType.TOUCH_START, this.onBackpackTouchStart, this);
-    backpack.on(Node.EventType.TOUCH_MOVE, this.onBackpackTouchMove, this);
-    backpack.on(Node.EventType.TOUCH_END, this.onBackpackTouchEnd, this);
-    backpack.on(Node.EventType.TOUCH_CANCEL, this.onBackpackTouchEnd, this);
-    this.backpackNode = backpack;
+    addText(backpack, 'BackpackLabel', '背包', 0, 0, 74, 58, 24, palette.white);
+
+    makeDraggable(backpack, {
+      onDragStart: () => {
+        this.selectedCellIndex = -1;
+      },
+      onTap: () => this.toggleSelection(this.state.backpackCellIndex, () => this.openBackpackModal()),
+      onDrop: (node) => this.dropBackpack(node)
+    });
   }
 
   /** 点一下选中并亮出信息条，再点一下才触发这一格自己的动作。 */
@@ -377,16 +379,16 @@ export class BoardSceneController extends Component {
       -570,
       540,
       68,
-      new Color(255, 249, 233),
-      new Color(190, 129, 49),
+      palette.cream,
+      palette.goldStroke,
       12
     );
     card.setSiblingIndex(this.contentRoot.children.length - 1);
     this.selectionInfo = card;
 
-    addText(card, 'SelectionName', selection.name, -180, 16, 200, 30, 21, new Color(91, 64, 55));
-    addText(card, 'SelectionLevel', selection.level, 190, 16, 140, 30, 16, new Color(174, 112, 63));
-    addText(card, 'SelectionDescription', selection.description, 0, -16, 500, 28, 15, new Color(139, 111, 92));
+    addText(card, 'SelectionName', selection.name, -180, 16, 200, 30, 21, palette.ink);
+    addText(card, 'SelectionLevel', selection.level, 190, 16, 140, 30, 16, palette.amber);
+    addText(card, 'SelectionDescription', selection.description, 0, -16, 500, 28, 15, palette.inkSoft);
   }
 
   private describeSelection(): { name: string; level: string; description: string } | null {
@@ -412,11 +414,7 @@ export class BoardSceneController extends Component {
     const item = this.itemConfigs.find((entry) => entry.id === itemId);
     if (!item) return null;
 
-    return {
-      name: item.name,
-      level: `${item.level} 级`,
-      description: item.description
-    };
+    return { name: item.name, level: `${item.level} 级`, description: item.description };
   }
 
   private generateFromPrepStation(): void {
@@ -426,15 +424,18 @@ export class BoardSceneController extends Component {
       return;
     }
 
-    const result = spendStamina(this.state, 1);
-    if (!result.spent) {
-      this.showBoardNotice('体力不足');
+    const item = rollBasicItem(this.itemConfigs);
+    if (!item) {
+      this.showBoardNotice('没有可用食材');
       return;
     }
 
-    const basicItems = this.itemConfigs.filter((item) => item.level === 1);
-    const item = basicItems[Math.floor(Math.random() * basicItems.length)];
-    if (!item) return;
+    const result = spendStamina(this.state, 1);
+    if (!result.spent) {
+      this.state = result.state;
+      this.showBoardNotice('体力不足');
+      return;
+    }
 
     this.state = {
       ...result.state,
@@ -446,43 +447,18 @@ export class BoardSceneController extends Component {
     this.showBoardNotice(`获得：${item.name}`);
   }
 
-  private onPrepStationTouchStart(event: EventTouch): void {
-    const location = event.getUILocation();
-    this.prepStationStartTouch.set(location.x, location.y);
-    this.prepStationStartPosition.set(this.prepStationNode?.position ?? Vec3.ZERO);
-    this.prepStationDragging = false;
-    this.prepStationNode?.setSiblingIndex(this.boardObjects?.children.length ?? 0);
-  }
-
-  private onPrepStationTouchMove(event: EventTouch): void {
-    if (!this.prepStationNode) return;
-
-    const location = event.getUILocation();
-    const deltaX = location.x - this.prepStationStartTouch.x;
-    const deltaY = location.y - this.prepStationStartTouch.y;
-    if (Math.hypot(deltaX, deltaY) > 10) this.prepStationDragging = true;
-    if (this.prepStationDragging) {
-      this.prepStationNode.setPosition(
-        this.prepStationStartPosition.x + deltaX,
-        this.prepStationStartPosition.y + deltaY
-      );
-    }
-  }
-
-  private onPrepStationTouchEnd(): void {
-    if (!this.prepStationNode) return;
-
-    if (!this.prepStationDragging) {
-      this.toggleSelection(this.state.prepStationCellIndex, () => this.generateFromPrepStation());
+  private dropPrepStation(node: Node): void {
+    const targetIndex = this.findDropCellIndex(node.position);
+    if (targetIndex === -1) {
+      this.renderBoardObjects();
       return;
     }
 
-    const targetIndex = this.findClosestCellIndex(this.prepStationNode.position);
     if (targetIndex === this.state.backpackCellIndex) {
       const stored = storePrepStationInBackpack(this.state);
-      this.state = stored.stored ? stored.state : this.state;
-      this.renderBoardObjects();
+      if (stored.stored) this.state = stored.state;
       this.persistState();
+      this.renderBoardObjects();
       this.showBoardNotice(stored.stored ? '备料台已放入背包' : '背包已满');
       return;
     }
@@ -493,156 +469,125 @@ export class BoardSceneController extends Component {
       targetIndex,
       this.state.backpackCellIndex
     );
-    if (result.moved) {
-      this.state.board = result.board;
-      this.state.prepStationCellIndex = result.fixtureCellIndex;
-      this.state.backpackCellIndex = result.otherFixtureCellIndex;
-      this.persistState();
+    if (!result.moved) {
       this.renderBoardObjects();
-      if (result.displaced) this.animateDisplacement(result.displaced);
-      return;
-    }
-    this.snapPrepStationToCell();
-  }
-
-  private onBackpackTouchStart(event: EventTouch): void {
-    const location = event.getUILocation();
-    this.backpackStartTouch.set(location.x, location.y);
-    this.backpackStartPosition.set(this.backpackNode?.position ?? Vec3.ZERO);
-    this.backpackDragging = false;
-    this.backpackNode?.setSiblingIndex(this.boardFrame?.children.length ?? 0);
-  }
-
-  private onBackpackTouchMove(event: EventTouch): void {
-    if (!this.backpackNode) return;
-
-    const location = event.getUILocation();
-    const deltaX = location.x - this.backpackStartTouch.x;
-    const deltaY = location.y - this.backpackStartTouch.y;
-    if (Math.hypot(deltaX, deltaY) > 10) {
-      this.backpackDragging = true;
-      this.selectedCellIndex = -1;
-    }
-
-    if (this.backpackDragging) {
-      this.backpackNode.setPosition(
-        this.backpackStartPosition.x + deltaX,
-        this.backpackStartPosition.y + deltaY
-      );
-    }
-  }
-
-  private onBackpackTouchEnd(): void {
-    if (!this.backpackNode) return;
-
-    if (!this.backpackDragging) {
-      this.toggleSelection(this.state.backpackCellIndex, () => this.openBackpackModal());
       return;
     }
 
-    const targetIndex = this.findClosestCellIndex(this.backpackNode.position);
+    this.state = {
+      ...this.state,
+      board: result.board,
+      prepStationCellIndex: result.fixtureCellIndex,
+      backpackCellIndex: result.otherFixtureCellIndex
+    };
+    this.persistState();
+    this.renderBoardObjects();
+    if (result.displaced) this.animateDisplacement(result.displaced);
+  }
+
+  private dropBackpack(node: Node): void {
+    const targetIndex = this.findDropCellIndex(node.position);
+    if (targetIndex === -1) {
+      this.renderBoardObjects();
+      return;
+    }
+
     const result = moveFixture(
       this.state.board,
       this.state.backpackCellIndex,
       targetIndex,
       this.state.prepStationCellIndex
     );
-    if (result.moved) {
-      this.state.board = result.board;
-      this.state.backpackCellIndex = result.fixtureCellIndex;
-      this.state.prepStationCellIndex = result.otherFixtureCellIndex;
+    if (!result.moved) {
+      this.renderBoardObjects();
+      return;
+    }
+
+    this.state = {
+      ...this.state,
+      board: result.board,
+      backpackCellIndex: result.fixtureCellIndex,
+      prepStationCellIndex: result.otherFixtureCellIndex
+    };
+    this.persistState();
+    this.renderBoardObjects();
+    if (result.displaced) this.animateDisplacement(result.displaced);
+  }
+
+  private dropItem(node: Node, cellIndex: number): void {
+    const targetIndex = this.findDropCellIndex(node.position);
+    if (targetIndex === -1 || targetIndex === cellIndex) {
+      this.renderBoardObjects();
+      return;
+    }
+
+    if (targetIndex === this.state.backpackCellIndex) {
+      this.storeItemInBackpack(cellIndex);
+      return;
+    }
+
+    const merged = tryMerge(this.state.board, cellIndex, targetIndex, this.itemConfigs);
+    if (merged.merged) {
+      this.state = { ...this.state, board: merged.board };
       this.persistState();
       this.renderBoardObjects();
-      if (result.displaced) this.animateDisplacement(result.displaced);
-      return;
-    }
-    this.snapBackpackToCell();
-  }
-
-  private onItemTouchStart(itemNode: Node, cellIndex: number, event: EventTouch): void {
-    const location = event.getUILocation();
-    this.draggedItemNode = itemNode;
-    this.draggedItemIndex = cellIndex;
-    this.itemStartTouch.set(location.x, location.y);
-    this.itemStartPosition.set(itemNode.position);
-    this.itemDragging = false;
-    itemNode.setSiblingIndex(this.boardObjects?.children.length ?? 0);
-  }
-
-  private onItemTouchMove(itemNode: Node, event: EventTouch): void {
-    if (this.draggedItemNode !== itemNode) return;
-
-    const location = event.getUILocation();
-    const deltaX = location.x - this.itemStartTouch.x;
-    const deltaY = location.y - this.itemStartTouch.y;
-    if (Math.hypot(deltaX, deltaY) > 10) {
-      this.itemDragging = true;
-      // 拖动中不能重建棋盘，否则手上这个节点会被销毁；等落子时统一重绘。
-      this.selectedCellIndex = -1;
-    }
-    if (this.itemDragging) {
-      itemNode.setPosition(this.itemStartPosition.x + deltaX, this.itemStartPosition.y + deltaY);
-    }
-  }
-
-  private onItemTouchEnd(itemNode: Node, cellIndex: number): void {
-    if (this.draggedItemNode !== itemNode) return;
-
-    const wasDragging = this.itemDragging;
-    this.draggedItemNode = null;
-    this.draggedItemIndex = -1;
-    this.itemDragging = false;
-    if (!wasDragging) {
-      this.toggleSelection(cellIndex, () => this.clearSelection());
+      const upgraded = this.itemConfigs.find((item) => item.id === merged.board[targetIndex].itemId);
+      this.showBoardNotice(`合成：${upgraded?.name ?? '新食材'}`);
       return;
     }
 
-    const targetIndex = this.findClosestCellIndex(itemNode.position);
-    if (targetIndex === this.state.backpackCellIndex) {
-      const result = storeBoardItemInBackpack(this.state, cellIndex);
-      if (result.stored) {
-        this.state = result.state;
-        this.persistState();
-        this.renderBoardObjects();
-        this.showBoardNotice('已放入背包');
-      } else {
-        this.renderBoardObjects();
-        this.showBoardNotice('背包已满');
-      }
+    if (targetIndex === this.state.prepStationCellIndex) {
+      this.pushPrepStationAside(cellIndex);
       return;
     }
-    if (targetIndex !== cellIndex) {
-      const result = tryMerge(this.state.board, cellIndex, targetIndex, this.itemConfigs);
-      if (result.merged) {
-        this.state.board = result.board;
-        this.persistState();
-        this.renderBoardObjects();
-        const upgradedItem = this.itemConfigs.find((item) => item.id === result.board[targetIndex].itemId);
-        this.showBoardNotice(`合成：${upgradedItem?.name ?? '新食材'}`);
-        return;
-      }
-      if (targetIndex === this.state.prepStationCellIndex) {
-        this.pushPrepStationAside(cellIndex);
-        return;
-      }
-      {
-        const moved = moveBoardItem(this.state.board, cellIndex, targetIndex, [
-          this.state.backpackCellIndex,
-          this.state.prepStationCellIndex
-        ]);
-        if (moved.moved) {
-          this.state.board = moved.board;
-          this.persistState();
-          this.renderBoardObjects();
-          if (moved.displaced) {
-            this.animateDisplacement(moved.displaced);
-            this.animateSettle(targetIndex);
-          }
-          return;
-        }
-      }
+
+    const moved = moveBoardItem(this.state.board, cellIndex, targetIndex, [
+      this.state.backpackCellIndex,
+      this.state.prepStationCellIndex
+    ]);
+    if (!moved.moved) {
+      this.renderBoardObjects();
+      return;
+    }
+
+    this.state = { ...this.state, board: moved.board };
+    this.persistState();
+    this.renderBoardObjects();
+    if (moved.displaced) {
+      this.animateDisplacement(moved.displaced);
+      this.animateSettle(targetIndex);
+    }
+  }
+
+  private storeItemInBackpack(cellIndex: number): void {
+    const result = storeBoardItemInBackpack(this.state, cellIndex);
+    if (result.stored) {
+      this.state = result.state;
+      this.persistState();
     }
     this.renderBoardObjects();
+    this.showBoardNotice(result.stored ? '已放入背包' : '背包已满');
+  }
+
+  /** 食材压到备料台头上，备料台照样被顺时针挤开——它不比食材金贵。 */
+  private pushPrepStationAside(itemCellIndex: number): void {
+    const stationIndex = this.state.prepStationCellIndex;
+    const result = placeItemOnFixtureCell(this.state.board, itemCellIndex, stationIndex, [
+      this.state.backpackCellIndex
+    ]);
+    if (!result.moved) {
+      this.renderBoardObjects();
+      return;
+    }
+
+    this.state = {
+      ...this.state,
+      board: result.board,
+      prepStationCellIndex: result.fixtureCellIndex
+    };
+    this.persistState();
+    this.renderBoardObjects();
+    this.animateSettle(stationIndex);
   }
 
   private animateDisplacement(displaced: DisplacedItem): void {
@@ -670,28 +615,8 @@ export class BoardSceneController extends Component {
     tween(node).to(0.2, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' }).start();
   }
 
-  /** 食材压到备料台头上，备料台照样被顺时针挤开——它不比食材金贵。 */
-  private pushPrepStationAside(itemCellIndex: number): void {
-    const stationIndex = this.state.prepStationCellIndex;
-    const board = this.state.board.map((cell) => ({ ...cell }));
-    const itemId = board[itemCellIndex].itemId;
-    if (!itemId) {
-      this.renderBoardObjects();
-      return;
-    }
-
-    board[itemCellIndex].itemId = null;
-    const escapeIndex = findEscapeCell(board, stationIndex, itemCellIndex, [this.state.backpackCellIndex]);
-    board[stationIndex].itemId = itemId;
-
-    this.state.board = board;
-    this.state.prepStationCellIndex = escapeIndex;
-    this.persistState();
-    this.renderBoardObjects();
-    this.animateSettle(stationIndex);
-  }
-
-  private findClosestCellIndex(position: Readonly<Vec3>): number {
+  /** 松手点落在哪一格；离最近的格子还超过一格远，就是没落在棋盘上，返回 -1。 */
+  private findDropCellIndex(position: Readonly<Vec3>): number {
     let closestIndex = -1;
     let closestDistance = Number.POSITIVE_INFINITY;
 
@@ -703,29 +628,19 @@ export class BoardSceneController extends Component {
       }
     });
 
-    return closestIndex;
-  }
-
-  private snapBackpackToCell(): void {
-    const position = this.cellPositions[this.state.backpackCellIndex];
-    if (position) this.backpackNode?.setPosition(position);
-  }
-
-  private snapPrepStationToCell(): void {
-    const position = this.cellPositions[this.state.prepStationCellIndex];
-    if (position) this.prepStationNode?.setPosition(position);
+    return closestDistance <= DROP_MAX_DISTANCE * DROP_MAX_DISTANCE ? closestIndex : -1;
   }
 
   private openBackpackModal(): void {
     if (this.backpackModal) return;
 
     this.clearSelection();
-    const overlay = addPanel(this.node, 'BackpackModal', 0, 0, 750, 1334, new Color(48, 42, 39, 190), undefined, 0);
+    const overlay = addPanel(this.node, 'BackpackModal', 0, 0, 750, 1334, palette.overlay, undefined, 0);
     overlay.setSiblingIndex(this.node.children.length - 1);
     this.backpackModal = overlay;
 
-    const panel = addPanel(overlay, 'BackpackPanel', 0, 20, 650, 850, new Color(242, 232, 205), new Color(88, 130, 170), 14);
-    addText(panel, 'BackpackTitle', '背包', 0, 365, 300, 56, 38, new Color(91, 64, 55));
+    const panel = addPanel(overlay, 'BackpackPanel', 0, 20, 650, 850, palette.panel, palette.blue, 14);
+    addText(panel, 'BackpackTitle', '背包', 0, 365, 300, 56, 38, palette.ink);
     addText(
       panel,
       'BackpackCapacity',
@@ -735,60 +650,61 @@ export class BoardSceneController extends Component {
       240,
       38,
       24,
-      new Color(174, 112, 63)
+      palette.amber
     );
-    addText(panel, 'BackpackHint', '点一下取出，放回棋盘。', 0, 262, 400, 34, 18, new Color(139, 111, 92));
+    addText(panel, 'BackpackHint', '点一下取出，放回棋盘。', 0, 262, 400, 34, 18, palette.inkSoft);
 
     const columns = 5;
-    const cellSize = 104;
+    const slotSize = 104;
     const gap = 14;
-    const startX = -((columns - 1) * (cellSize + gap)) / 2;
+    const startX = -((columns - 1) * (slotSize + gap)) / 2;
     const startY = 185;
     for (let index = 0; index < this.state.backpackCapacity; index += 1) {
-      const column = index % columns;
-      const row = Math.floor(index / columns);
-      const cell = addPanel(
+      const slot = addPanel(
         panel,
         `BackpackSlot${index}`,
-        startX + column * (cellSize + gap),
-        startY - row * (cellSize + gap),
-        cellSize,
-        cellSize,
-        new Color(255, 244, 215),
+        startX + (index % columns) * (slotSize + gap),
+        startY - Math.floor(index / columns) * (slotSize + gap),
+        slotSize,
+        slotSize,
+        palette.backpackSlot,
         undefined,
         12
       );
-      const storedId = this.state.backpackItemIds[index];
-      if (!storedId) continue;
-
-      if (storedId === PREP_STATION_ID) {
-        addPanel(cell, 'StoredItemColor', 0, 13, 64, 34, new Color(242, 183, 72), undefined, 10);
-        addText(cell, 'StoredItemName', '备料台', 0, -22, 90, 42, 16, new Color(91, 64, 55));
-        cell.on(Node.EventType.TOUCH_END, () => this.takeFromBackpack(index));
-        continue;
-      }
-
-      const item = this.itemConfigs.find((entry) => entry.id === storedId);
-      if (!item) continue;
-      addPanel(cell, 'StoredItemColor', 0, 13, 64, 34, this.getItemColor(item.chain), undefined, 10);
-      addText(cell, 'StoredItemName', item.name, 0, -22, 90, 42, 16, new Color(91, 64, 55));
-      cell.on(Node.EventType.TOUCH_END, () => this.takeFromBackpack(index));
+      this.buildBackpackSlotContent(slot, index);
     }
 
-    addButton(panel, 'CloseBackpackButton', '关闭', 0, -345, 150, 58, new Color(218, 91, 77), () => this.closeBackpackModal());
+    addButton(panel, 'CloseBackpackButton', '关闭', 0, -345, 150, 58, palette.red, () => this.closeBackpackModal());
+  }
+
+  private buildBackpackSlotContent(slot: Node, slotIndex: number): void {
+    const storedId = this.state.backpackItemIds[slotIndex];
+    if (!storedId) return;
+
+    const stored = this.describeStoredItem(storedId);
+    if (!stored) return;
+
+    addPanel(slot, 'StoredItemColor', 0, 13, 64, 34, stored.color, undefined, 10);
+    addText(slot, 'StoredItemName', stored.name, 0, -22, 90, 42, 16, palette.ink);
+    slot.on(Node.EventType.TOUCH_END, () => this.takeFromBackpack(slotIndex));
+  }
+
+  private describeStoredItem(storedId: ItemId): { name: string; color: ReturnType<typeof getItemColor> } | null {
+    if (storedId === PREP_STATION_ID) {
+      return { name: '备料台', color: palette.prepStation };
+    }
+
+    const item = this.itemConfigs.find((entry) => entry.id === storedId);
+    return item ? { name: item.name, color: getItemColor(item.chain) } : null;
   }
 
   private takeFromBackpack(slotIndex: number): void {
+    const name = this.describeStoredItem(this.state.backpackItemIds[slotIndex])?.name ?? '食材';
     const result = takeBackpackItemToBoard(this.state, slotIndex);
     if (!result.taken) {
       this.showBoardNotice(result.reason === 'board_full' ? '棋盘没有空位' : '这个格子是空的');
       return;
     }
-
-    const storedId = this.state.backpackItemIds[slotIndex];
-    const name = storedId === PREP_STATION_ID
-      ? '备料台'
-      : this.itemConfigs.find((entry) => entry.id === storedId)?.name ?? '食材';
 
     this.state = result.state;
     this.persistState();
@@ -804,12 +720,11 @@ export class BoardSceneController extends Component {
   }
 
   private showBoardNotice(message: string): void {
-    const existing = this.node.getChildByName('BoardNotice');
-    existing?.destroy();
+    this.node.getChildByName('BoardNotice')?.destroy();
 
     // 落在底部信息条那一格，别糊在棋盘格子上。
-    const banner = addPanel(this.node, 'BoardNotice', 90, -570, 540, 68, new Color(91, 64, 55), undefined, 12);
-    addText(banner, 'BoardNoticeText', message, 0, 0, 500, 52, 21, new Color(255, 249, 233));
+    const banner = addPanel(this.node, 'BoardNotice', 90, -570, 540, 68, palette.ink, undefined, 12);
+    addText(banner, 'BoardNoticeText', message, 0, 0, 500, 52, 21, palette.cream);
     banner.setSiblingIndex(this.node.children.length - 1);
     this.scheduleOnce(() => {
       if (banner.isValid) banner.destroy();

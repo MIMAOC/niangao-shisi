@@ -126,6 +126,8 @@ export interface GameState {
   petStageId: PetStageConfig['id'];
   petIntimacy: number;
   customerHealingByType: Record<CustomerType, number>;
+  /** 元宝限购是按天算的，跨天由 spendPremiumItem 清零。 */
+  premiumPurchaseDate: string;
   premiumPurchaseHistory: Record<string, number>;
   unlocked: string[];
   updatedAt: number;

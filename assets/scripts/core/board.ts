@@ -1,6 +1,9 @@
 import type { BoardCell, ItemConfig, ItemId } from './types';
 
-const COLUMN_COUNT = 7;
+/** 棋盘尺寸的唯一真源：渲染层也从这里取，别在别处再写死 7 / 9 / 63。 */
+export const BOARD_COLUMNS = 7;
+export const BOARD_ROWS = 9;
+export const BOARD_SIZE = BOARD_COLUMNS * BOARD_ROWS;
 
 export interface MergeResult {
   merged: boolean;
@@ -31,7 +34,7 @@ export interface BoardItemMoveResult {
   reason?: 'invalid_index' | 'empty_source';
 }
 
-export function createBoard(size = 63): BoardCell[] {
+export function createBoard(size = BOARD_SIZE): BoardCell[] {
   return Array.from({ length: size }, (_, index) => ({ index, itemId: null }));
 }
 
@@ -142,6 +145,41 @@ export function moveBoardItem(
   return { moved: true, board: next, displaced };
 }
 
+export interface FixturePushResult {
+  moved: boolean;
+  board: BoardCell[];
+  /** 设施被挤开后落在哪。 */
+  fixtureCellIndex: number;
+  reason?: 'invalid_index' | 'empty_source';
+}
+
+/**
+ * 把食材放到设施（备料台）占着的那一格：设施照样被顺时针挤开——它不比食材金贵。
+ */
+export function placeItemOnFixtureCell(
+  board: BoardCell[],
+  itemCellIndex: number,
+  fixtureCellIndex: number,
+  reservedCellIndexes: number[] = []
+): FixturePushResult {
+  if (!board[itemCellIndex] || !board[fixtureCellIndex] || itemCellIndex === fixtureCellIndex) {
+    return { moved: false, board, fixtureCellIndex, reason: 'invalid_index' };
+  }
+
+  const itemId = board[itemCellIndex].itemId;
+  if (!itemId) {
+    return { moved: false, board, fixtureCellIndex, reason: 'empty_source' };
+  }
+
+  const next = board.map((cell) => ({ ...cell }));
+  next[itemCellIndex].itemId = null;
+  // 先腾空源格再找逃逸位，设施才有可能落回源格（棋盘全满时的兜底）。
+  const escapeIndex = findEscapeCell(next, fixtureCellIndex, itemCellIndex, reservedCellIndexes);
+  next[fixtureCellIndex].itemId = itemId;
+
+  return { moved: true, board: next, fixtureCellIndex: escapeIndex };
+}
+
 /**
  * 被挤开的食材从目标格的正上方起顺时针绕圈找空位（上、右上、右、右下、下、左下、左、左上），
  * 一圈找不到就往外扩一圈。源格不参与，否则挤压会退化成两者互换。
@@ -151,7 +189,7 @@ function findDisplacementCell(
   targetIndex: number,
   sourceIndex: number,
   reservedCellIndexes: number[],
-  columnCount = COLUMN_COUNT
+  columnCount = BOARD_COLUMNS
 ): number {
   const blocked = new Set([targetIndex, sourceIndex, ...reservedCellIndexes]);
   const rowCount = Math.ceil(board.length / columnCount);

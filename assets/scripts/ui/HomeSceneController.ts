@@ -4,23 +4,21 @@ import {
   Component,
   director,
   Graphics,
-  JsonAsset,
   Node,
   ResolutionPolicy,
-  resources,
-  sys,
   UITransform,
   Vec3,
   view
 } from 'cc';
 import { createInitialGameState } from '../core/gameState';
-import { deserializeSave } from '../core/save';
 import type { GameState, ItemConfig, LevelConfig } from '../core/types';
+import { loadGameState, loadJsonConfig } from './gameStore';
+import { getItemColor, palette } from './theme';
 import { addButton, addPanel, addText } from './UiKit';
 import { StatusBarView } from './StatusBarView';
 
 const { ccclass } = _decorator;
-const saveKey = 'niangao-shisi-save';
+
 const chainTitles: Record<ItemConfig['chain'], string> = {
   rice: '饭团线',
   tea: '饮品线',
@@ -46,37 +44,16 @@ export class HomeSceneController extends Component {
   private async initializeScene(): Promise<void> {
     try {
       [this.itemConfigs, this.levelConfigs] = await Promise.all([
-        this.loadJson<ItemConfig[]>('config/items'),
-        this.loadJson<LevelConfig[]>('config/levels')
+        loadJsonConfig<ItemConfig[]>('config/items'),
+        loadJsonConfig<LevelConfig[]>('config/levels')
       ]);
-      this.restoreState();
-      this.buildScene();
     } catch (error) {
-      console.error('Failed to initialize home scene', error);
+      console.error('Failed to load home configs', error);
+      return;
     }
-  }
 
-  private loadJson<T>(path: string): Promise<T> {
-    return new Promise((resolve, reject) => {
-      resources.load(path, JsonAsset, (error, asset) => {
-        if (error || !asset) {
-          reject(error ?? new Error(`Missing resource: ${path}`));
-          return;
-        }
-        resolve(asset.json as T);
-      });
-    });
-  }
-
-  private restoreState(): void {
-    const saved = sys.localStorage.getItem(saveKey);
-    if (!saved) return;
-
-    try {
-      this.state = deserializeSave(saved);
-    } catch {
-      sys.localStorage.removeItem(saveKey);
-    }
+    this.state = loadGameState();
+    this.buildScene();
   }
 
   private buildScene(): void {
@@ -85,49 +62,38 @@ export class HomeSceneController extends Component {
     root.layer = this.node.layer;
     root.addComponent(UITransform).setContentSize(750, 1334);
 
-    addPanel(root, 'NightSky', 0, 0, 750, 1334, new Color(48, 64, 84), undefined, 0);
-    addPanel(root, 'StreetGlow', 0, -410, 750, 514, new Color(107, 105, 102), undefined, 0);
+    addPanel(root, 'NightSky', 0, 0, 750, 1334, palette.nightSky, undefined, 0);
+    addPanel(root, 'StreetGlow', 0, -410, 750, 514, palette.streetGlow, undefined, 0);
 
-    const status = root.addComponent(StatusBarView);
-    status.render(this.state);
+    root.addComponent(StatusBarView).render(this.state);
 
-    addText(root, 'GameTitle', '年糕食肆', 0, 490, 520, 80, 54, new Color(255, 226, 143));
-    addText(root, 'OpenSign', '今晚也好好吃饭', 0, 438, 420, 42, 24, new Color(244, 232, 211));
+    addText(root, 'GameTitle', '年糕食肆', 0, 490, 520, 80, 54, palette.titleGold);
+    addText(root, 'OpenSign', '今晚也好好吃饭', 0, 438, 420, 42, 24, palette.signText);
 
     this.drawShop(root);
 
-    addButton(root, 'BusinessButton', '营业', 0, -392, 290, 82, new Color(218, 91, 77), () => this.enterBoardScene());
+    addButton(root, 'BusinessButton', '营业', 0, -392, 290, 82, palette.red, () => this.enterBoardScene());
 
-    addButton(root, 'ShopButton', '店铺', -230, -545, 190, 72, new Color(238, 174, 55), () => undefined);
-    addButton(root, 'PetButton', '宠物', 0, -545, 190, 72, new Color(91, 166, 126), () => undefined);
-    addButton(root, 'MenuButton', '菜单', 230, -545, 190, 72, new Color(102, 145, 190), () => this.openMenuModal());
+    addButton(root, 'ShopButton', '店铺', -230, -545, 190, 72, palette.coin, () => undefined);
+    addButton(root, 'PetButton', '宠物', 0, -545, 190, 72, palette.green, () => undefined);
+    addButton(root, 'MenuButton', '菜单', 230, -545, 190, 72, palette.blue, () => this.openMenuModal());
   }
 
   private openMenuModal(): void {
     if (this.menuModal) return;
 
-    const overlay = addPanel(this.node, 'MenuModal', 0, 0, 750, 1334, new Color(28, 34, 44, 200), undefined, 0);
+    const overlay = addPanel(this.node, 'MenuModal', 0, 0, 750, 1334, palette.menuOverlay, undefined, 0);
     overlay.setSiblingIndex(this.node.children.length - 1);
     this.menuModal = overlay;
 
-    const panel = addPanel(overlay, 'MenuPanel', 0, 20, 670, 940, new Color(242, 232, 205), new Color(102, 145, 190), 14);
-    addText(panel, 'MenuTitle', '菜单', 0, 410, 300, 56, 38, new Color(91, 64, 55));
-    addText(
-      panel,
-      'MenuHint',
-      '同款食材两两合成，越合越高级。',
-      0,
-      362,
-      560,
-      34,
-      18,
-      new Color(139, 111, 92)
-    );
+    const panel = addPanel(overlay, 'MenuPanel', 0, 20, 670, 940, palette.panel, palette.blue, 14);
+    addText(panel, 'MenuTitle', '菜单', 0, 410, 300, 56, 38, palette.ink);
+    addText(panel, 'MenuHint', '同款食材两两合成，越合越高级。', 0, 362, 560, 34, 18, palette.inkSoft);
 
     this.buildChains(panel);
     this.buildUnlockHint(panel);
 
-    addButton(panel, 'CloseMenuButton', '关闭', 0, -420, 150, 58, new Color(218, 91, 77), () => this.closeMenuModal());
+    addButton(panel, 'CloseMenuButton', '关闭', 0, -420, 150, 58, palette.red, () => this.closeMenuModal());
   }
 
   private buildChains(panel: Node): void {
@@ -139,19 +105,18 @@ export class HomeSceneController extends Component {
         .sort((left, right) => left.level - right.level);
       const rowY = 280 - chainIndex * 200;
 
-      addText(panel, `ChainTitle${chain}`, chainTitles[chain], -250, rowY, 220, 34, 22, new Color(174, 112, 63));
+      addText(panel, `ChainTitle${chain}`, chainTitles[chain], -250, rowY, 220, 34, 22, palette.amber);
 
       items.forEach((item, index) => {
         const unlocked = this.isUnlocked(item);
-        const cardX = -240 + index * 160;
         const card = addPanel(
           panel,
           `ChainItem${item.id}`,
-          cardX,
+          -240 + index * 160,
           rowY - 76,
           140,
           104,
-          unlocked ? this.getItemColor(chain) : new Color(214, 205, 186),
+          unlocked ? getItemColor(item.chain) : palette.locked,
           undefined,
           10
         );
@@ -164,9 +129,9 @@ export class HomeSceneController extends Component {
           128,
           32,
           18,
-          unlocked ? new Color(91, 64, 55) : new Color(139, 132, 118)
+          unlocked ? palette.ink : palette.inkMuted
         );
-        addText(card, 'ChainItemDetail', `${item.level} 级`, 0, 2, 128, 26, 14, new Color(139, 111, 92));
+        addText(card, 'ChainItemDetail', `${item.level} 级`, 0, 2, 128, 26, 14, palette.inkSoft);
         addText(
           card,
           'ChainItemDescription',
@@ -176,7 +141,7 @@ export class HomeSceneController extends Component {
           128,
           40,
           12,
-          new Color(139, 111, 92)
+          palette.inkSoft
         );
       });
     });
@@ -198,15 +163,9 @@ export class HomeSceneController extends Component {
       ? `店铺 ${next.level} 级解锁：${next.unlocks.join('、')}`
       : '所有菜品都已解锁，去接客吧。';
 
-    const strip = addPanel(panel, 'UnlockHint', 0, -330, 590, 76, new Color(255, 249, 233), new Color(190, 129, 49), 10);
-    addText(strip, 'UnlockHintTitle', `当前店铺等级 ${this.state.shopLevel}`, 0, 18, 560, 28, 17, new Color(174, 112, 63));
-    addText(strip, 'UnlockHintText', text, 0, -14, 560, 32, 15, new Color(91, 64, 55));
-  }
-
-  private getItemColor(chain: ItemConfig['chain']): Color {
-    if (chain === 'tea') return new Color(161, 211, 185);
-    if (chain === 'sweet_potato') return new Color(241, 178, 132);
-    return new Color(248, 218, 132);
+    const strip = addPanel(panel, 'UnlockHint', 0, -330, 590, 76, palette.cream, palette.goldStroke, 10);
+    addText(strip, 'UnlockHintTitle', `当前店铺等级 ${this.state.shopLevel}`, 0, 18, 560, 28, 17, palette.amber);
+    addText(strip, 'UnlockHintText', text, 0, -14, 560, 32, 15, palette.ink);
   }
 
   private closeMenuModal(): void {
@@ -214,6 +173,7 @@ export class HomeSceneController extends Component {
     this.menuModal = null;
   }
 
+  /** 店面插画：一次性的手绘，颜色只在这里用，就不进色板了。 */
   private drawShop(root: Node): void {
     const shop = new Node('ShopIllustration');
     root.addChild(shop);
@@ -266,7 +226,7 @@ export class HomeSceneController extends Component {
     addText(shop, 'ShopSignText', '年糕食肆', 0, 227, 250, 46, 30, new Color(108, 67, 46));
     addText(shop, 'WindowMessage', '热饭 · 热茶 · 烤红薯', 0, -205, 450, 42, 23, new Color(255, 242, 212));
 
-    const petBadge = addPanel(shop, 'PetBadge', 220, -210, 92, 92, new Color(142, 194, 150), new Color(91, 64, 55), 8);
-    addText(petBadge, 'PetText', '小猫', 0, 0, 72, 48, 22, new Color(255, 255, 255));
+    const petBadge = addPanel(shop, 'PetBadge', 220, -210, 92, 92, new Color(142, 194, 150), palette.ink, 8);
+    addText(petBadge, 'PetText', '小猫', 0, 0, 72, 48, 22, palette.pureWhite);
   }
 }

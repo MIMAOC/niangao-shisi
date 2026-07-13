@@ -9,6 +9,7 @@ import {
   Vec3,
   VerticalTextAlignment
 } from 'cc';
+import { palette } from './theme';
 
 export function addPanel(
   parent: Node,
@@ -82,8 +83,8 @@ export function addButton(
   fill: Color,
   onClick: () => void
 ): Node {
-  const node = addPanel(parent, name, x, y, width, height, fill, new Color(91, 64, 55), 8);
-  addText(node, `${name}Label`, text, 0, 0, width - 18, height - 12, 26, new Color(255, 252, 240));
+  const node = addPanel(parent, name, x, y, width, height, fill, palette.ink, 8);
+  addText(node, `${name}Label`, text, 0, 0, width - 18, height - 12, 26, palette.white);
   node.addComponent(Button);
   node.on(Button.EventType.CLICK, onClick);
   return node;

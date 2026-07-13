@@ -23,16 +23,26 @@ export function getCustomerHealingProgress(
   return { level: config.levelRequirements.length + 1, pointsIntoLevel: 0, pointsRequired: 0 };
 }
 
+/** 结算用：配置缺条目就是配置错了，直接炸出来。 */
 export function getFoodHealingValue(
   customerType: CustomerType,
   foodId: ItemId,
   config: CustomerHealingConfig
 ): number {
-  const value = config.customers[customerType]?.foodHealing[foodId];
-  if (value === undefined) {
+  const value = tryGetFoodHealingValue(customerType, foodId, config);
+  if (value === null) {
     throw new Error(`Missing healing value: ${customerType}/${foodId}`);
   }
   return value;
+}
+
+/** 展示用：缺条目返回 null，让界面降级显示，别为了一行配置白屏。 */
+export function tryGetFoodHealingValue(
+  customerType: CustomerType,
+  foodId: ItemId,
+  config: CustomerHealingConfig
+): number | null {
+  return config.customers[customerType]?.foodHealing[foodId] ?? null;
 }
 
 export function getNewCustomerUnlocks(
