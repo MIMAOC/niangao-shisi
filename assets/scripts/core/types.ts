@@ -19,6 +19,7 @@ export interface ItemConfig {
   level: number;
   nextId: ItemId | null;
   icon: string;
+  description: string;
 }
 
 export interface OrderConfig {

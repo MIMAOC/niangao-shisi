@@ -9,12 +9,13 @@ import {
   ResolutionPolicy,
   resources,
   sys,
+  tween,
   UITransform,
   Vec2,
   Vec3,
   view
 } from 'cc';
-import { storeBoardItemInBackpack } from '../core/backpack';
+import { storeBoardItemInBackpack, takeBackpackItemToBoard } from '../core/backpack';
 import {
   hasAvailableBoardCell,
   moveBackpack,
@@ -22,6 +23,7 @@ import {
   spawnBasicItem,
   tryMerge
 } from '../core/board';
+import type { DisplacedItem } from '../core/board';
 import { getFoodHealingValue } from '../core/customerHealing';
 import { createInitialGameState } from '../core/gameState';
 import { createOrderQueue } from '../core/orders';
@@ -33,6 +35,7 @@ import { StatusBarView } from './StatusBarView';
 
 const { ccclass } = _decorator;
 const saveKey = 'niangao-shisi-save';
+const selectedBorderColor = new Color(255, 239, 152);
 
 const emptyHealingConfig: CustomerHealingConfig = {
   levelRequirements: [100, 220, 400, 650, 1000, 1500, 2200, 3100, 4200],
@@ -47,11 +50,13 @@ export class BoardSceneController extends Component {
   private healingConfig: CustomerHealingConfig = emptyHealingConfig;
   private statusBar: StatusBarView | null = null;
   private readonly cellPositions: Vec3[] = [];
+  private contentRoot: Node | null = null;
   private boardFrame: Node | null = null;
   private boardObjects: Node | null = null;
   private backpackNode: Node | null = null;
   private backpackModal: Node | null = null;
-  private backpackSelected = false;
+  private selectionInfo: Node | null = null;
+  private selectedCellIndex = -1;
   private prepStationNode: Node | null = null;
   private backpackStartTouch = new Vec2();
   private backpackStartPosition = new Vec3();
@@ -131,6 +136,7 @@ export class BoardSceneController extends Component {
     this.node.addChild(root);
     root.layer = this.node.layer;
     root.addComponent(UITransform).setContentSize(750, 1334);
+    this.contentRoot = root;
 
     addPanel(root, 'PaperBackground', 0, 0, 750, 1334, new Color(247, 232, 197), undefined, 0);
     this.statusBar = root.addComponent(StatusBarView);
@@ -141,9 +147,7 @@ export class BoardSceneController extends Component {
     this.buildOrders(root);
     this.buildBoard(root);
 
-    addButton(root, 'BasketButton', '食材篮', -205, -570, 170, 68, new Color(218, 91, 77), () => undefined);
-    addButton(root, 'HomeButton', '返回食肆', 0, -570, 180, 68, new Color(102, 145, 190), () => this.returnHomeScene());
-    addButton(root, 'MenuButton', '菜单', 205, -570, 170, 68, new Color(238, 174, 55), () => undefined);
+    addButton(root, 'HomeButton', '返回食肆', -285, -570, 160, 68, new Color(102, 145, 190), () => this.returnHomeScene());
   }
 
   private buildOrders(root: Node): void {
@@ -196,12 +200,25 @@ export class BoardSceneController extends Component {
   }
 
   private buildBoard(root: Node): void {
-    const frame = addPanel(root, 'BoardFrame', 0, -90, 710, 860, new Color(239, 221, 193), undefined, 8);
-    this.boardFrame = frame;
     const cellSize = 90;
     const gap = 4;
+    const padding = 10;
     const totalWidth = cellSize * 7 + gap * 6;
     const totalHeight = cellSize * 9 + gap * 8;
+
+    // 框的尺寸跟着格子算，四边留一样宽的边，写死尺寸会让左右边框比上下粗一截。
+    const frame = addPanel(
+      root,
+      'BoardFrame',
+      0,
+      -90,
+      totalWidth + padding * 2,
+      totalHeight + padding * 2,
+      new Color(239, 221, 193),
+      undefined,
+      8
+    );
+    this.boardFrame = frame;
     const startX = -totalWidth / 2 + cellSize / 2;
     const startY = totalHeight / 2 - cellSize / 2;
 
@@ -247,6 +264,7 @@ export class BoardSceneController extends Component {
     });
     this.buildPrepStation(objects);
     this.buildBackpack(objects);
+    this.renderSelectionInfo();
   }
 
   private buildItem(parent: Node, cellIndex: number, itemId: ItemId): void {
@@ -262,7 +280,7 @@ export class BoardSceneController extends Component {
       82,
       82,
       this.getItemColor(item.chain),
-      undefined,
+      this.selectedCellIndex === cellIndex ? selectedBorderColor : undefined,
       14
     );
     addText(itemNode, 'ItemName', item.name, 0, 0, 72, 58, 18, new Color(91, 64, 55));
@@ -290,7 +308,7 @@ export class BoardSceneController extends Component {
       82,
       82,
       new Color(242, 183, 72),
-      new Color(190, 129, 49),
+      this.selectedCellIndex === this.state.prepStationCellIndex ? selectedBorderColor : new Color(190, 129, 49),
       14
     );
     addText(prepStation, 'PrepStationLabel', '备料台\n-1体力', 0, 0, 74, 62, 17, new Color(91, 64, 55));
@@ -311,7 +329,7 @@ export class BoardSceneController extends Component {
       82,
       82,
       new Color(91, 166, 126),
-      this.backpackSelected ? new Color(255, 239, 152) : new Color(64, 112, 86),
+      this.selectedCellIndex === this.state.backpackCellIndex ? selectedBorderColor : new Color(64, 112, 86),
       6
     );
     addText(backpack, 'BackpackLabel', '背包', 0, 0, 74, 58, 24, new Color(255, 252, 240));
@@ -320,6 +338,79 @@ export class BoardSceneController extends Component {
     backpack.on(Node.EventType.TOUCH_END, this.onBackpackTouchEnd, this);
     backpack.on(Node.EventType.TOUCH_CANCEL, this.onBackpackTouchEnd, this);
     this.backpackNode = backpack;
+  }
+
+  /** 点一下选中并亮出信息条，再点一下才触发这一格自己的动作。 */
+  private toggleSelection(cellIndex: number, activate: () => void): void {
+    if (this.selectedCellIndex === cellIndex) {
+      activate();
+      return;
+    }
+    this.selectedCellIndex = cellIndex;
+    this.renderBoardObjects();
+  }
+
+  private clearSelection(): void {
+    if (this.selectedCellIndex === -1) return;
+    this.selectedCellIndex = -1;
+    this.renderBoardObjects();
+  }
+
+  private renderSelectionInfo(): void {
+    this.selectionInfo?.destroy();
+    this.selectionInfo = null;
+
+    const selection = this.describeSelection();
+    if (!selection || !this.contentRoot) return;
+
+    // 占据返回按钮右边那片空地，棋盘一格不让。
+    const card = addPanel(
+      this.contentRoot,
+      'SelectionInfo',
+      90,
+      -570,
+      540,
+      68,
+      new Color(255, 249, 233),
+      new Color(190, 129, 49),
+      12
+    );
+    card.setSiblingIndex(this.contentRoot.children.length - 1);
+    this.selectionInfo = card;
+
+    addText(card, 'SelectionName', selection.name, -180, 16, 200, 30, 21, new Color(91, 64, 55));
+    addText(card, 'SelectionLevel', selection.level, 190, 16, 140, 30, 16, new Color(174, 112, 63));
+    addText(card, 'SelectionDescription', selection.description, 0, -16, 500, 28, 15, new Color(139, 111, 92));
+  }
+
+  private describeSelection(): { name: string; level: string; description: string } | null {
+    if (this.selectedCellIndex === -1) return null;
+
+    if (this.selectedCellIndex === this.state.backpackCellIndex) {
+      return {
+        name: '背包',
+        level: `${this.state.backpackItemIds.length} / ${this.state.backpackCapacity}`,
+        description: '再点一下打开，看看存了些什么。'
+      };
+    }
+
+    if (this.selectedCellIndex === this.state.prepStationCellIndex) {
+      return {
+        name: '备料台',
+        level: '消耗 1 体力',
+        description: '再点一下备料，随机产出一样一级食材。'
+      };
+    }
+
+    const itemId = this.state.board[this.selectedCellIndex]?.itemId;
+    const item = this.itemConfigs.find((entry) => entry.id === itemId);
+    if (!item) return null;
+
+    return {
+      name: item.name,
+      level: `${item.level} 级`,
+      description: item.description
+    };
   }
 
   private generateFromPrepStation(): void {
@@ -376,7 +467,7 @@ export class BoardSceneController extends Component {
     if (!this.prepStationNode) return;
 
     if (!this.prepStationDragging) {
-      this.generateFromPrepStation();
+      this.toggleSelection(this.state.prepStationCellIndex, () => this.generateFromPrepStation());
       return;
     }
 
@@ -387,12 +478,15 @@ export class BoardSceneController extends Component {
       return;
     }
 
-    const result = moveBackpack(this.state.board, this.state.prepStationCellIndex, targetIndex);
+    const result = moveBackpack(this.state.board, this.state.prepStationCellIndex, targetIndex, [
+      this.state.backpackCellIndex
+    ]);
     if (result.moved) {
       this.state.board = result.board;
       this.state.prepStationCellIndex = result.backpackCellIndex;
       this.persistState();
       this.renderBoardObjects();
+      if (result.displaced) this.animateDisplacement(result.displaced);
       return;
     }
     this.snapPrepStationToCell();
@@ -414,7 +508,7 @@ export class BoardSceneController extends Component {
     const deltaY = location.y - this.backpackStartTouch.y;
     if (Math.hypot(deltaX, deltaY) > 10) {
       this.backpackDragging = true;
-      this.backpackSelected = false;
+      this.selectedCellIndex = -1;
     }
 
     if (this.backpackDragging) {
@@ -429,12 +523,7 @@ export class BoardSceneController extends Component {
     if (!this.backpackNode) return;
 
     if (!this.backpackDragging) {
-      if (this.backpackSelected) {
-        this.openBackpackModal();
-      } else {
-        this.backpackSelected = true;
-        this.renderBoardObjects();
-      }
+      this.toggleSelection(this.state.backpackCellIndex, () => this.openBackpackModal());
       return;
     }
 
@@ -444,19 +533,21 @@ export class BoardSceneController extends Component {
       this.showBoardNotice('备料台占用此格');
       return;
     }
-    const result = moveBackpack(this.state.board, this.state.backpackCellIndex, targetIndex);
+    const result = moveBackpack(this.state.board, this.state.backpackCellIndex, targetIndex, [
+      this.state.prepStationCellIndex
+    ]);
     if (result.moved) {
       this.state.board = result.board;
       this.state.backpackCellIndex = result.backpackCellIndex;
       this.persistState();
       this.renderBoardObjects();
+      if (result.displaced) this.animateDisplacement(result.displaced);
       return;
     }
     this.snapBackpackToCell();
   }
 
   private onItemTouchStart(itemNode: Node, cellIndex: number, event: EventTouch): void {
-    this.backpackSelected = false;
     const location = event.getUILocation();
     this.draggedItemNode = itemNode;
     this.draggedItemIndex = cellIndex;
@@ -472,7 +563,11 @@ export class BoardSceneController extends Component {
     const location = event.getUILocation();
     const deltaX = location.x - this.itemStartTouch.x;
     const deltaY = location.y - this.itemStartTouch.y;
-    if (Math.hypot(deltaX, deltaY) > 10) this.itemDragging = true;
+    if (Math.hypot(deltaX, deltaY) > 10) {
+      this.itemDragging = true;
+      // 拖动中不能重建棋盘，否则手上这个节点会被销毁；等落子时统一重绘。
+      this.selectedCellIndex = -1;
+    }
     if (this.itemDragging) {
       itemNode.setPosition(this.itemStartPosition.x + deltaX, this.itemStartPosition.y + deltaY);
     }
@@ -485,7 +580,10 @@ export class BoardSceneController extends Component {
     this.draggedItemNode = null;
     this.draggedItemIndex = -1;
     this.itemDragging = false;
-    if (!wasDragging) return;
+    if (!wasDragging) {
+      this.toggleSelection(cellIndex, () => this.clearSelection());
+      return;
+    }
 
     const targetIndex = this.findClosestCellIndex(itemNode.position);
     if (targetIndex === this.state.backpackCellIndex) {
@@ -512,16 +610,46 @@ export class BoardSceneController extends Component {
         return;
       }
       if (targetIndex !== this.state.prepStationCellIndex) {
-        const moved = moveBoardItem(this.state.board, cellIndex, targetIndex);
+        const moved = moveBoardItem(this.state.board, cellIndex, targetIndex, [
+          this.state.backpackCellIndex,
+          this.state.prepStationCellIndex
+        ]);
         if (moved.moved) {
           this.state.board = moved.board;
           this.persistState();
           this.renderBoardObjects();
+          if (moved.displaced) {
+            this.animateDisplacement(moved.displaced);
+            this.animateSettle(targetIndex);
+          }
           return;
         }
       }
     }
     this.renderBoardObjects();
+  }
+
+  private animateDisplacement(displaced: DisplacedItem): void {
+    const node = this.boardObjects?.getChildByName(`Item${displaced.toIndex}`);
+    const from = this.cellPositions[displaced.fromIndex];
+    const to = this.cellPositions[displaced.toIndex];
+    if (!node || !from || !to) return;
+
+    node.setPosition(from.x, from.y);
+    node.setScale(1.18, 0.82, 1);
+    tween(node).to(0.28, { position: new Vec3(to.x, to.y, 0) }, { easing: 'backOut' }).start();
+    tween(node)
+      .to(0.14, { scale: new Vec3(0.88, 1.12, 1) }, { easing: 'quadOut' })
+      .to(0.18, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+      .start();
+  }
+
+  private animateSettle(cellIndex: number): void {
+    const node = this.boardObjects?.getChildByName(`Item${cellIndex}`);
+    if (!node) return;
+
+    node.setScale(1.16, 1.16, 1);
+    tween(node).to(0.2, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' }).start();
   }
 
   private findClosestCellIndex(position: Readonly<Vec3>): number {
@@ -549,15 +677,10 @@ export class BoardSceneController extends Component {
     if (position) this.prepStationNode?.setPosition(position);
   }
 
-  private showBackpackPlaceholder(): void {
-    this.showBoardNotice('背包收纳功能开发中');
-  }
-
   private openBackpackModal(): void {
     if (this.backpackModal) return;
 
-    this.backpackSelected = false;
-    this.renderBoardObjects();
+    this.clearSelection();
     const overlay = addPanel(this.node, 'BackpackModal', 0, 0, 750, 1334, new Color(48, 42, 39, 190), undefined, 0);
     overlay.setSiblingIndex(this.node.children.length - 1);
     this.backpackModal = overlay;
@@ -575,6 +698,7 @@ export class BoardSceneController extends Component {
       24,
       new Color(174, 112, 63)
     );
+    addText(panel, 'BackpackHint', '点一下取出，放回棋盘。', 0, 262, 400, 34, 18, new Color(139, 111, 92));
 
     const columns = 5;
     const cellSize = 104;
@@ -601,9 +725,26 @@ export class BoardSceneController extends Component {
       if (!item) continue;
       addPanel(cell, 'StoredItemColor', 0, 13, 64, 34, this.getItemColor(item.chain), undefined, 10);
       addText(cell, 'StoredItemName', item.name, 0, -22, 90, 42, 16, new Color(91, 64, 55));
+      cell.on(Node.EventType.TOUCH_END, () => this.takeFromBackpack(index));
     }
 
     addButton(panel, 'CloseBackpackButton', '关闭', 0, -345, 150, 58, new Color(218, 91, 77), () => this.closeBackpackModal());
+  }
+
+  private takeFromBackpack(slotIndex: number): void {
+    const result = takeBackpackItemToBoard(this.state, slotIndex);
+    if (!result.taken) {
+      this.showBoardNotice(result.reason === 'board_full' ? '棋盘没有空位' : '这个格子是空的');
+      return;
+    }
+
+    const item = this.itemConfigs.find((entry) => entry.id === this.state.backpackItemIds[slotIndex]);
+    this.state = result.state;
+    this.persistState();
+    this.closeBackpackModal();
+    this.renderBoardObjects();
+    this.animateSettle(result.cellIndex);
+    this.showBoardNotice(`已取出：${item?.name ?? '食材'}`);
   }
 
   private closeBackpackModal(): void {

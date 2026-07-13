@@ -3,8 +3,8 @@ import { loadGameConfig, type RawGameConfig } from '../../assets/scripts/core/co
 
 const rawConfig: RawGameConfig = {
   items: [
-    { id: 'rice_1', name: '米粒', chain: 'rice', level: 1, nextId: 'rice_2', icon: 'icons/rice_1' },
-    { id: 'rice_2', name: '米团', chain: 'rice', level: 2, nextId: null, icon: 'icons/rice_2' }
+    { id: 'rice_1', name: '米粒', chain: 'rice', level: 1, nextId: 'rice_2', icon: 'icons/rice_1', description: '新碾的糯米。' },
+    { id: 'rice_2', name: '米团', chain: 'rice', level: 2, nextId: null, icon: 'icons/rice_2', description: '揉成团的米。' }
   ],
   orders: [
     {
