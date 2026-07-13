@@ -14,13 +14,20 @@ import {
   Vec3,
   view
 } from 'cc';
-import { moveBackpack } from '../core/board';
+import { storeBoardItemInBackpack } from '../core/backpack';
+import {
+  hasAvailableBoardCell,
+  moveBackpack,
+  moveBoardItem,
+  spawnBasicItem,
+  tryMerge
+} from '../core/board';
 import { getFoodHealingValue } from '../core/customerHealing';
 import { createInitialGameState } from '../core/gameState';
 import { createOrderQueue } from '../core/orders';
 import { deserializeSave, serializeSave } from '../core/save';
-import { claimStaminaAd, recoverStamina } from '../core/stamina';
-import type { CustomerHealingConfig, GameState, ItemConfig, OrderConfig } from '../core/types';
+import { claimStaminaAd, recoverStamina, spendStamina } from '../core/stamina';
+import type { CustomerHealingConfig, GameState, ItemConfig, ItemId, OrderConfig } from '../core/types';
 import { addButton, addPanel, addText } from './UiKit';
 import { StatusBarView } from './StatusBarView';
 
@@ -41,10 +48,22 @@ export class BoardSceneController extends Component {
   private statusBar: StatusBarView | null = null;
   private readonly cellPositions: Vec3[] = [];
   private boardFrame: Node | null = null;
+  private boardObjects: Node | null = null;
   private backpackNode: Node | null = null;
+  private backpackModal: Node | null = null;
+  private backpackSelected = false;
+  private prepStationNode: Node | null = null;
   private backpackStartTouch = new Vec2();
   private backpackStartPosition = new Vec3();
   private backpackDragging = false;
+  private draggedItemNode: Node | null = null;
+  private draggedItemIndex = -1;
+  private itemStartTouch = new Vec2();
+  private itemStartPosition = new Vec3();
+  private itemDragging = false;
+  private prepStationStartTouch = new Vec2();
+  private prepStationStartPosition = new Vec3();
+  private prepStationDragging = false;
 
   onLoad(): void {
     view.setDesignResolutionSize(750, 1334, ResolutionPolicy.FIXED_WIDTH);
@@ -208,7 +227,78 @@ export class BoardSceneController extends Component {
       }
     }
 
-    this.buildBackpack(frame);
+    this.renderBoardObjects();
+  }
+
+  private renderBoardObjects(): void {
+    if (!this.boardFrame) return;
+
+    this.boardObjects?.destroy();
+    const objects = new Node('BoardObjects');
+    this.boardFrame.addChild(objects);
+    objects.layer = this.boardFrame.layer;
+    this.boardObjects = objects;
+    this.backpackNode = null;
+    this.prepStationNode = null;
+
+    this.state.board.forEach((cell) => {
+      if (!cell.itemId || cell.index === this.state.backpackCellIndex || cell.index === this.state.prepStationCellIndex) return;
+      this.buildItem(objects, cell.index, cell.itemId);
+    });
+    this.buildPrepStation(objects);
+    this.buildBackpack(objects);
+  }
+
+  private buildItem(parent: Node, cellIndex: number, itemId: ItemId): void {
+    const item = this.itemConfigs.find((entry) => entry.id === itemId);
+    const position = this.cellPositions[cellIndex];
+    if (!item || !position) return;
+
+    const itemNode = addPanel(
+      parent,
+      `Item${cellIndex}`,
+      position.x,
+      position.y,
+      82,
+      82,
+      this.getItemColor(item.chain),
+      undefined,
+      14
+    );
+    addText(itemNode, 'ItemName', item.name, 0, 0, 72, 58, 18, new Color(91, 64, 55));
+    itemNode.on(Node.EventType.TOUCH_START, (event: EventTouch) => this.onItemTouchStart(itemNode, cellIndex, event));
+    itemNode.on(Node.EventType.TOUCH_MOVE, (event: EventTouch) => this.onItemTouchMove(itemNode, event));
+    itemNode.on(Node.EventType.TOUCH_END, () => this.onItemTouchEnd(itemNode, cellIndex));
+    itemNode.on(Node.EventType.TOUCH_CANCEL, () => this.onItemTouchEnd(itemNode, cellIndex));
+  }
+
+  private getItemColor(chain: ItemConfig['chain']): Color {
+    if (chain === 'tea') return new Color(161, 211, 185);
+    if (chain === 'sweet_potato') return new Color(241, 178, 132);
+    return new Color(248, 218, 132);
+  }
+
+  private buildPrepStation(parent: Node): void {
+    const position = this.cellPositions[this.state.prepStationCellIndex];
+    if (!position) return;
+
+    const prepStation = addPanel(
+      parent,
+      'PrepStation',
+      position.x,
+      position.y,
+      82,
+      82,
+      new Color(242, 183, 72),
+      new Color(190, 129, 49),
+      14
+    );
+    addText(prepStation, 'PrepStationLabel', '备料台\n-1体力', 0, 0, 74, 62, 17, new Color(91, 64, 55));
+    prepStation.on(Node.EventType.TOUCH_START, this.onPrepStationTouchStart, this);
+    prepStation.on(Node.EventType.TOUCH_MOVE, this.onPrepStationTouchMove, this);
+    prepStation.on(Node.EventType.TOUCH_END, this.onPrepStationTouchEnd, this);
+    prepStation.on(Node.EventType.TOUCH_CANCEL, this.onPrepStationTouchEnd, this);
+    this.prepStationNode = prepStation;
   }
 
   private buildBackpack(frame: Node): void {
@@ -221,7 +311,7 @@ export class BoardSceneController extends Component {
       82,
       82,
       new Color(91, 166, 126),
-      new Color(64, 112, 86),
+      this.backpackSelected ? new Color(255, 239, 152) : new Color(64, 112, 86),
       6
     );
     addText(backpack, 'BackpackLabel', '背包', 0, 0, 74, 58, 24, new Color(255, 252, 240));
@@ -230,6 +320,82 @@ export class BoardSceneController extends Component {
     backpack.on(Node.EventType.TOUCH_END, this.onBackpackTouchEnd, this);
     backpack.on(Node.EventType.TOUCH_CANCEL, this.onBackpackTouchEnd, this);
     this.backpackNode = backpack;
+  }
+
+  private generateFromPrepStation(): void {
+    const reservedIndexes = [this.state.backpackCellIndex, this.state.prepStationCellIndex];
+    if (!hasAvailableBoardCell(this.state.board, reservedIndexes)) {
+      this.showBoardNotice('棋盘没有空位');
+      return;
+    }
+
+    const result = spendStamina(this.state, 1);
+    if (!result.spent) {
+      this.showBoardNotice('体力不足');
+      return;
+    }
+
+    const basicItems = this.itemConfigs.filter((item) => item.level === 1);
+    const item = basicItems[Math.floor(Math.random() * basicItems.length)];
+    if (!item) return;
+
+    this.state = {
+      ...result.state,
+      board: spawnBasicItem(result.state.board, item.id, reservedIndexes)
+    };
+    this.persistState();
+    this.renderStatusBar();
+    this.renderBoardObjects();
+    this.showBoardNotice(`获得：${item.name}`);
+  }
+
+  private onPrepStationTouchStart(event: EventTouch): void {
+    const location = event.getUILocation();
+    this.prepStationStartTouch.set(location.x, location.y);
+    this.prepStationStartPosition.set(this.prepStationNode?.position ?? Vec3.ZERO);
+    this.prepStationDragging = false;
+    this.prepStationNode?.setSiblingIndex(this.boardObjects?.children.length ?? 0);
+  }
+
+  private onPrepStationTouchMove(event: EventTouch): void {
+    if (!this.prepStationNode) return;
+
+    const location = event.getUILocation();
+    const deltaX = location.x - this.prepStationStartTouch.x;
+    const deltaY = location.y - this.prepStationStartTouch.y;
+    if (Math.hypot(deltaX, deltaY) > 10) this.prepStationDragging = true;
+    if (this.prepStationDragging) {
+      this.prepStationNode.setPosition(
+        this.prepStationStartPosition.x + deltaX,
+        this.prepStationStartPosition.y + deltaY
+      );
+    }
+  }
+
+  private onPrepStationTouchEnd(): void {
+    if (!this.prepStationNode) return;
+
+    if (!this.prepStationDragging) {
+      this.generateFromPrepStation();
+      return;
+    }
+
+    const targetIndex = this.findClosestCellIndex(this.prepStationNode.position);
+    if (targetIndex === this.state.backpackCellIndex) {
+      this.snapPrepStationToCell();
+      this.showBoardNotice('背包占用此格');
+      return;
+    }
+
+    const result = moveBackpack(this.state.board, this.state.prepStationCellIndex, targetIndex);
+    if (result.moved) {
+      this.state.board = result.board;
+      this.state.prepStationCellIndex = result.backpackCellIndex;
+      this.persistState();
+      this.renderBoardObjects();
+      return;
+    }
+    this.snapPrepStationToCell();
   }
 
   private onBackpackTouchStart(event: EventTouch): void {
@@ -246,7 +412,10 @@ export class BoardSceneController extends Component {
     const location = event.getUILocation();
     const deltaX = location.x - this.backpackStartTouch.x;
     const deltaY = location.y - this.backpackStartTouch.y;
-    if (Math.hypot(deltaX, deltaY) > 10) this.backpackDragging = true;
+    if (Math.hypot(deltaX, deltaY) > 10) {
+      this.backpackDragging = true;
+      this.backpackSelected = false;
+    }
 
     if (this.backpackDragging) {
       this.backpackNode.setPosition(
@@ -260,19 +429,99 @@ export class BoardSceneController extends Component {
     if (!this.backpackNode) return;
 
     if (!this.backpackDragging) {
-      this.showBackpackPlaceholder();
-      this.snapBackpackToCell();
+      if (this.backpackSelected) {
+        this.openBackpackModal();
+      } else {
+        this.backpackSelected = true;
+        this.renderBoardObjects();
+      }
       return;
     }
 
     const targetIndex = this.findClosestCellIndex(this.backpackNode.position);
+    if (targetIndex === this.state.prepStationCellIndex) {
+      this.snapBackpackToCell();
+      this.showBoardNotice('备料台占用此格');
+      return;
+    }
     const result = moveBackpack(this.state.board, this.state.backpackCellIndex, targetIndex);
     if (result.moved) {
       this.state.board = result.board;
       this.state.backpackCellIndex = result.backpackCellIndex;
       this.persistState();
+      this.renderBoardObjects();
+      return;
     }
     this.snapBackpackToCell();
+  }
+
+  private onItemTouchStart(itemNode: Node, cellIndex: number, event: EventTouch): void {
+    this.backpackSelected = false;
+    const location = event.getUILocation();
+    this.draggedItemNode = itemNode;
+    this.draggedItemIndex = cellIndex;
+    this.itemStartTouch.set(location.x, location.y);
+    this.itemStartPosition.set(itemNode.position);
+    this.itemDragging = false;
+    itemNode.setSiblingIndex(this.boardObjects?.children.length ?? 0);
+  }
+
+  private onItemTouchMove(itemNode: Node, event: EventTouch): void {
+    if (this.draggedItemNode !== itemNode) return;
+
+    const location = event.getUILocation();
+    const deltaX = location.x - this.itemStartTouch.x;
+    const deltaY = location.y - this.itemStartTouch.y;
+    if (Math.hypot(deltaX, deltaY) > 10) this.itemDragging = true;
+    if (this.itemDragging) {
+      itemNode.setPosition(this.itemStartPosition.x + deltaX, this.itemStartPosition.y + deltaY);
+    }
+  }
+
+  private onItemTouchEnd(itemNode: Node, cellIndex: number): void {
+    if (this.draggedItemNode !== itemNode) return;
+
+    const wasDragging = this.itemDragging;
+    this.draggedItemNode = null;
+    this.draggedItemIndex = -1;
+    this.itemDragging = false;
+    if (!wasDragging) return;
+
+    const targetIndex = this.findClosestCellIndex(itemNode.position);
+    if (targetIndex === this.state.backpackCellIndex) {
+      const result = storeBoardItemInBackpack(this.state, cellIndex);
+      if (result.stored) {
+        this.state = result.state;
+        this.persistState();
+        this.renderBoardObjects();
+        this.showBoardNotice('已放入背包');
+      } else {
+        this.renderBoardObjects();
+        this.showBoardNotice('背包已满');
+      }
+      return;
+    }
+    if (targetIndex !== cellIndex) {
+      const result = tryMerge(this.state.board, cellIndex, targetIndex, this.itemConfigs);
+      if (result.merged) {
+        this.state.board = result.board;
+        this.persistState();
+        this.renderBoardObjects();
+        const upgradedItem = this.itemConfigs.find((item) => item.id === result.board[targetIndex].itemId);
+        this.showBoardNotice(`合成：${upgradedItem?.name ?? '新食材'}`);
+        return;
+      }
+      if (targetIndex !== this.state.prepStationCellIndex) {
+        const moved = moveBoardItem(this.state.board, cellIndex, targetIndex);
+        if (moved.moved) {
+          this.state.board = moved.board;
+          this.persistState();
+          this.renderBoardObjects();
+          return;
+        }
+      }
+    }
+    this.renderBoardObjects();
   }
 
   private findClosestCellIndex(position: Readonly<Vec3>): number {
@@ -295,13 +544,80 @@ export class BoardSceneController extends Component {
     if (position) this.backpackNode?.setPosition(position);
   }
 
+  private snapPrepStationToCell(): void {
+    const position = this.cellPositions[this.state.prepStationCellIndex];
+    if (position) this.prepStationNode?.setPosition(position);
+  }
+
   private showBackpackPlaceholder(): void {
+    this.showBoardNotice('背包收纳功能开发中');
+  }
+
+  private openBackpackModal(): void {
+    if (this.backpackModal) return;
+
+    this.backpackSelected = false;
+    this.renderBoardObjects();
+    const overlay = addPanel(this.node, 'BackpackModal', 0, 0, 750, 1334, new Color(48, 42, 39, 190), undefined, 0);
+    overlay.setSiblingIndex(this.node.children.length - 1);
+    this.backpackModal = overlay;
+
+    const panel = addPanel(overlay, 'BackpackPanel', 0, 20, 650, 850, new Color(242, 232, 205), new Color(88, 130, 170), 14);
+    addText(panel, 'BackpackTitle', '背包', 0, 365, 300, 56, 38, new Color(91, 64, 55));
+    addText(
+      panel,
+      'BackpackCapacity',
+      `${this.state.backpackItemIds.length} / ${this.state.backpackCapacity}`,
+      0,
+      310,
+      240,
+      38,
+      24,
+      new Color(174, 112, 63)
+    );
+
+    const columns = 5;
+    const cellSize = 104;
+    const gap = 14;
+    const startX = -((columns - 1) * (cellSize + gap)) / 2;
+    const startY = 185;
+    for (let index = 0; index < this.state.backpackCapacity; index += 1) {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const cell = addPanel(
+        panel,
+        `BackpackSlot${index}`,
+        startX + column * (cellSize + gap),
+        startY - row * (cellSize + gap),
+        cellSize,
+        cellSize,
+        new Color(255, 244, 215),
+        undefined,
+        12
+      );
+      const itemId = this.state.backpackItemIds[index];
+      if (!itemId) continue;
+      const item = this.itemConfigs.find((entry) => entry.id === itemId);
+      if (!item) continue;
+      addPanel(cell, 'StoredItemColor', 0, 13, 64, 34, this.getItemColor(item.chain), undefined, 10);
+      addText(cell, 'StoredItemName', item.name, 0, -22, 90, 42, 16, new Color(91, 64, 55));
+    }
+
+    addButton(panel, 'CloseBackpackButton', '关闭', 0, -345, 150, 58, new Color(218, 91, 77), () => this.closeBackpackModal());
+  }
+
+  private closeBackpackModal(): void {
+    this.backpackModal?.destroy();
+    this.backpackModal = null;
+  }
+
+  private showBoardNotice(message: string): void {
     const existing = this.node.getChildByName('BackpackNotice');
     existing?.destroy();
     const label = addText(
       this.node,
       'BackpackNotice',
-      '背包功能开发中',
+      message,
       0,
       -470,
       280,
