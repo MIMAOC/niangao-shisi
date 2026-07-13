@@ -1,51 +1,70 @@
 {
-  "student": [
-    { "level": 1, "requiredHealingPoints": 0, "rewardType": "none", "rewardValue": 0 },
-    { "level": 2, "requiredHealingPoints": 20, "rewardType": "coins_percent", "rewardValue": 1 },
-    { "level": 3, "requiredHealingPoints": 60, "rewardType": "order_rate_percent", "rewardValue": 3 },
-    { "level": 4, "requiredHealingPoints": 120, "rewardType": "daily_item", "rewardValue": "random_level_1" },
-    { "level": 5, "requiredHealingPoints": 220, "rewardType": "cosmetic", "rewardValue": "customer_portrait_frame" }
-  ],
-  "worker": [
-    { "level": 1, "requiredHealingPoints": 0, "rewardType": "none", "rewardValue": 0 },
-    { "level": 2, "requiredHealingPoints": 20, "rewardType": "coins_percent", "rewardValue": 1 },
-    { "level": 3, "requiredHealingPoints": 60, "rewardType": "order_rate_percent", "rewardValue": 3 },
-    { "level": 4, "requiredHealingPoints": 120, "rewardType": "daily_item", "rewardValue": "random_level_1" },
-    { "level": 5, "requiredHealingPoints": 220, "rewardType": "cosmetic", "rewardValue": "customer_portrait_frame" }
-  ],
-  "elder": [
-    { "level": 1, "requiredHealingPoints": 0, "rewardType": "none", "rewardValue": 0 },
-    { "level": 2, "requiredHealingPoints": 20, "rewardType": "coins_percent", "rewardValue": 1 },
-    { "level": 3, "requiredHealingPoints": 60, "rewardType": "order_rate_percent", "rewardValue": 3 },
-    { "level": 4, "requiredHealingPoints": 120, "rewardType": "daily_item", "rewardValue": "random_level_1" },
-    { "level": 5, "requiredHealingPoints": 220, "rewardType": "cosmetic", "rewardValue": "customer_portrait_frame" }
-  ],
-  "courier": [
-    { "level": 1, "requiredHealingPoints": 0, "rewardType": "none", "rewardValue": 0 },
-    { "level": 2, "requiredHealingPoints": 20, "rewardType": "coins_percent", "rewardValue": 1 },
-    { "level": 3, "requiredHealingPoints": 60, "rewardType": "order_rate_percent", "rewardValue": 3 },
-    { "level": 4, "requiredHealingPoints": 120, "rewardType": "daily_item", "rewardValue": "random_level_1" },
-    { "level": 5, "requiredHealingPoints": 220, "rewardType": "cosmetic", "rewardValue": "customer_portrait_frame" }
-  ],
-  "medical": [
-    { "level": 1, "requiredHealingPoints": 0, "rewardType": "none", "rewardValue": 0 },
-    { "level": 2, "requiredHealingPoints": 20, "rewardType": "coins_percent", "rewardValue": 1 },
-    { "level": 3, "requiredHealingPoints": 60, "rewardType": "order_rate_percent", "rewardValue": 3 },
-    { "level": 4, "requiredHealingPoints": 120, "rewardType": "daily_item", "rewardValue": "random_level_1" },
-    { "level": 5, "requiredHealingPoints": 220, "rewardType": "cosmetic", "rewardValue": "customer_portrait_frame" }
-  ],
-  "couple": [
-    { "level": 1, "requiredHealingPoints": 0, "rewardType": "none", "rewardValue": 0 },
-    { "level": 2, "requiredHealingPoints": 20, "rewardType": "coins_percent", "rewardValue": 1 },
-    { "level": 3, "requiredHealingPoints": 60, "rewardType": "order_rate_percent", "rewardValue": 3 },
-    { "level": 4, "requiredHealingPoints": 120, "rewardType": "daily_item", "rewardValue": "random_level_1" },
-    { "level": 5, "requiredHealingPoints": 220, "rewardType": "cosmetic", "rewardValue": "customer_portrait_frame" }
-  ],
-  "mystery": [
-    { "level": 1, "requiredHealingPoints": 0, "rewardType": "none", "rewardValue": 0 },
-    { "level": 2, "requiredHealingPoints": 20, "rewardType": "coins_percent", "rewardValue": 1 },
-    { "level": 3, "requiredHealingPoints": 60, "rewardType": "order_rate_percent", "rewardValue": 3 },
-    { "level": 4, "requiredHealingPoints": 120, "rewardType": "daily_item", "rewardValue": "random_level_1" },
-    { "level": 5, "requiredHealingPoints": 220, "rewardType": "cosmetic", "rewardValue": "customer_portrait_frame" }
-  ]
+  "levelRequirements": [100, 220, 400, 650, 1000, 1500, 2200, 3100, 4200],
+  "customers": {
+    "student": {
+      "favoriteFoodIds": ["rice_2"],
+      "foodHealing": { "rice_2": 18, "tea_2": 5, "sweet_potato_2": 12, "sweet_potato_3": 16 },
+      "unlocks": [
+        { "level": 2, "type": "dialogue", "id": "student_dialogue_2", "title": "今天也有米团吗？" },
+        { "level": 3, "type": "action", "id": "student_wave", "title": "开心挥手" },
+        { "level": 4, "type": "dialogue", "id": "student_dialogue_4", "title": "学校里的新鲜事" },
+        { "level": 5, "type": "story", "id": "student_story_5", "title": "放学后的约定" },
+        { "level": 6, "type": "action", "id": "student_cheer", "title": "雀跃欢呼" },
+        { "level": 7, "type": "dialogue", "id": "student_dialogue_7", "title": "考试后的悄悄话" },
+        { "level": 8, "type": "action", "id": "student_thanks", "title": "认真道谢" },
+        { "level": 9, "type": "dialogue", "id": "student_dialogue_9", "title": "未来的愿望" },
+        { "level": 10, "type": "reward", "id": "student_keepsake", "title": "手绘感谢卡" }
+      ]
+    },
+    "worker": {
+      "favoriteFoodIds": ["tea_2"],
+      "foodHealing": { "rice_2": 8, "tea_2": 20, "sweet_potato_2": 14 },
+      "unlocks": [
+        { "level": 2, "type": "dialogue", "id": "worker_dialogue_2", "title": "今天有点冷" },
+        { "level": 3, "type": "action", "id": "worker_relax", "title": "放松肩膀" },
+        { "level": 4, "type": "dialogue", "id": "worker_dialogue_4", "title": "办公室里的小插曲" },
+        { "level": 5, "type": "story", "id": "worker_story_5", "title": "最后一班地铁" },
+        { "level": 6, "type": "action", "id": "worker_smile", "title": "安心微笑" },
+        { "level": 7, "type": "dialogue", "id": "worker_dialogue_7", "title": "迟到的晚餐" },
+        { "level": 8, "type": "action", "id": "worker_toast", "title": "举杯致意" },
+        { "level": 9, "type": "dialogue", "id": "worker_dialogue_9", "title": "新的生活计划" },
+        { "level": 10, "type": "reward", "id": "worker_lamp", "title": "暖光桌灯" }
+      ]
+    },
+    "elder": {
+      "favoriteFoodIds": ["sweet_potato_2"],
+      "foodHealing": { "rice_2": 6, "tea_2": 15, "sweet_potato_2": 22, "rice_4": 18 },
+      "unlocks": [
+        { "level": 2, "type": "dialogue", "id": "elder_dialogue_2", "title": "熟悉的味道" },
+        { "level": 3, "type": "action", "id": "elder_nod", "title": "满意点头" },
+        { "level": 4, "type": "dialogue", "id": "elder_dialogue_4", "title": "从前的街道" },
+        { "level": 5, "type": "story", "id": "elder_story_5", "title": "旧照片里的食肆" },
+        { "level": 6, "type": "action", "id": "elder_laugh", "title": "开怀一笑" },
+        { "level": 7, "type": "dialogue", "id": "elder_dialogue_7", "title": "邻里的趣事" },
+        { "level": 8, "type": "action", "id": "elder_wave", "title": "挥手告别" },
+        { "level": 9, "type": "dialogue", "id": "elder_dialogue_9", "title": "四季的回忆" },
+        { "level": 10, "type": "reward", "id": "elder_tea_set", "title": "老式茶具" }
+      ]
+    },
+    "courier": {
+      "favoriteFoodIds": ["rice_3"],
+      "foodHealing": { "rice_3": 20 },
+      "unlocks": []
+    },
+    "medical": {
+      "favoriteFoodIds": ["sweet_potato_4"],
+      "foodHealing": { "sweet_potato_4": 28 },
+      "unlocks": []
+    },
+    "couple": {
+      "favoriteFoodIds": ["tea_3"],
+      "foodHealing": { "tea_3": 20 },
+      "unlocks": []
+    },
+    "mystery": {
+      "favoriteFoodIds": ["tea_4"],
+      "foodHealing": { "tea_4": 26, "rice_3": 12, "sweet_potato_3": 15 },
+      "unlocks": []
+    }
+  }
 }

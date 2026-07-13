@@ -13,7 +13,8 @@ const rawConfig: RawGameConfig = {
       customerType: 'student',
       customerName: '放学学生',
       line: '想吃一点热乎的。',
-      rewards: { coins: 8, experience: 3, healingPoints: 1 }
+      difficulty: 'easy',
+      rewards: { coins: 8, experience: 3 }
     }
   ],
   levels: [{ level: 1, cumulativeExperience: 0, unlocks: ['rice_level_2'] }],
@@ -27,13 +28,14 @@ const rawConfig: RawGameConfig = {
   ],
   petFoods: [{ id: 'sheep_milk', name: '羊奶', priceCoins: 5, intimacyGain: 3, allowedStages: ['kitten'] }],
   customerHealing: {
-    student: [{ level: 1, requiredHealingPoints: 0, rewardType: 'none', rewardValue: 0 }],
-    worker: [{ level: 1, requiredHealingPoints: 0, rewardType: 'none', rewardValue: 0 }],
-    elder: [{ level: 1, requiredHealingPoints: 0, rewardType: 'none', rewardValue: 0 }],
-    courier: [{ level: 1, requiredHealingPoints: 0, rewardType: 'none', rewardValue: 0 }],
-    medical: [{ level: 1, requiredHealingPoints: 0, rewardType: 'none', rewardValue: 0 }],
-    couple: [{ level: 1, requiredHealingPoints: 0, rewardType: 'none', rewardValue: 0 }],
-    mystery: [{ level: 1, requiredHealingPoints: 0, rewardType: 'none', rewardValue: 0 }]
+    levelRequirements: [100, 220, 400, 650, 1000, 1500, 2200, 3100, 4200],
+    customers: {
+      student: {
+        favoriteFoodIds: ['rice_2'],
+        foodHealing: { rice_2: 18 },
+        unlocks: []
+      }
+    }
   },
   premiumItems: [
     { id: 'refresh_order', name: '刷新订单券', pricePremiumIngots: 5, effect: 'refresh_order', dailyLimit: 10 }

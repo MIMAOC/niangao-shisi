@@ -19,7 +19,16 @@ export function deserializeSave(payload: string): GameState {
       throw new Error('Invalid save payload');
     }
 
-    return parsed.state;
+    const stateWithLegacyHealing = parsed.state as GameState & { healingPoints?: number };
+    const { healingPoints: _retiredHealingPoints, ...state } = stateWithLegacyHealing;
+    const savedIndex = state.backpackCellIndex;
+    const savedCell = state.board[savedIndex];
+    if (savedCell?.itemId === null) {
+      return state;
+    }
+
+    const emptyCell = [...state.board].reverse().find((cell) => cell.itemId === null);
+    return { ...state, backpackCellIndex: emptyCell?.index ?? -1 };
   } catch {
     throw new Error('Invalid save payload');
   }

@@ -1,6 +1,7 @@
-export type CurrencyCode = 'coins' | 'premiumIngots' | 'experience' | 'healingPoints' | 'stamina';
+export type CurrencyCode = 'coins' | 'premiumIngots' | 'experience' | 'stamina';
 export type ItemId = string;
 export type OrderId = string;
+export type OrderDifficulty = 'easy' | 'normal' | 'hard';
 
 export type CustomerType =
   | 'student'
@@ -26,10 +27,10 @@ export interface OrderConfig {
   customerType: CustomerType;
   customerName: string;
   line: string;
+  difficulty: OrderDifficulty;
   rewards: {
     coins: number;
     experience: number;
-    healingPoints: number;
   };
 }
 
@@ -57,11 +58,24 @@ export interface PetFoodConfig {
   allowedStages: Array<PetStageConfig['id']>;
 }
 
-export interface CustomerHealingLevelConfig {
+export type CustomerUnlockType = 'dialogue' | 'action' | 'story' | 'reward';
+
+export interface CustomerUnlockConfig {
   level: number;
-  requiredHealingPoints: number;
-  rewardType: 'none' | 'coins_percent' | 'order_rate_percent' | 'daily_item' | 'cosmetic';
-  rewardValue: number | string;
+  type: CustomerUnlockType;
+  id: string;
+  title: string;
+}
+
+export interface CustomerHealingProfileConfig {
+  favoriteFoodIds: ItemId[];
+  foodHealing: Record<ItemId, number>;
+  unlocks: CustomerUnlockConfig[];
+}
+
+export interface CustomerHealingConfig {
+  levelRequirements: number[];
+  customers: Partial<Record<CustomerType, CustomerHealingProfileConfig>>;
 }
 
 export interface PremiumItemConfig {
@@ -78,7 +92,7 @@ export interface GameConfig {
   levels: LevelConfig[];
   petStages: PetStageConfig[];
   petFoods: PetFoodConfig[];
-  customerHealing: Record<CustomerType, CustomerHealingLevelConfig[]>;
+  customerHealing: CustomerHealingConfig;
   premiumItems: PremiumItemConfig[];
 }
 
@@ -90,15 +104,16 @@ export interface BoardCell {
 export interface ActiveOrder {
   instanceId: string;
   orderId: OrderId;
+  difficulty: OrderDifficulty;
 }
 
 export interface GameState {
   board: BoardCell[];
+  backpackCellIndex: number;
   activeOrders: ActiveOrder[];
   coins: number;
   premiumIngots: number;
   experience: number;
-  healingPoints: number;
   stamina: number;
   shopLevel: number;
   petStageId: PetStageConfig['id'];

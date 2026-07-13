@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createBoard, spawnBasicItem, tryMerge } from '../../assets/scripts/core/board';
+import { createBoard, moveBackpack, spawnBasicItem, tryMerge } from '../../assets/scripts/core/board';
+import { createInitialGameState } from '../../assets/scripts/core/gameState';
 import type { ItemConfig } from '../../assets/scripts/core/types';
 
 const items: ItemConfig[] = [
@@ -12,10 +13,39 @@ describe('board', () => {
     expect(createBoard()).toHaveLength(63);
   });
 
+  it('places the backpack in the last cell for a new game', () => {
+    expect(createInitialGameState(1000).backpackCellIndex).toBe(62);
+  });
+
   it('spawns a basic item into first empty cell', () => {
     const board = spawnBasicItem(createBoard(), 'rice_1');
 
     expect(board[0].itemId).toBe('rice_1');
+  });
+
+  it('skips the backpack cell when spawning an item', () => {
+    const board = createBoard(2);
+    board[0].itemId = 'rice_1';
+
+    expect(() => spawnBasicItem(board, 'rice_1', 1)).toThrow('Board is full');
+  });
+
+  it('moves the backpack to an empty cell', () => {
+    const result = moveBackpack(createBoard(), 62, 10);
+
+    expect(result.moved).toBe(true);
+    expect(result.backpackCellIndex).toBe(10);
+  });
+
+  it('keeps the backpack in place when the target contains an item', () => {
+    const board = createBoard();
+    board[10].itemId = 'rice_1';
+
+    const result = moveBackpack(board, 62, 10);
+
+    expect(result.moved).toBe(false);
+    expect(result.backpackCellIndex).toBe(62);
+    expect(result.reason).toBe('occupied_target');
   });
 
   it('merges identical items into next level', () => {

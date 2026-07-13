@@ -14,11 +14,11 @@ const customerTypes: CustomerType[] = [
 export function createInitialGameState(now = Date.now()): GameState {
   return {
     board: createBoard(),
+    backpackCellIndex: 62,
     activeOrders: [],
     coins: 0,
     premiumIngots: 0,
     experience: 0,
-    healingPoints: 0,
     stamina: 60,
     shopLevel: 1,
     petStageId: 'kitten',
@@ -27,7 +27,7 @@ export function createInitialGameState(now = Date.now()): GameState {
       customerTypes.map((type) => [type, 0])
     ) as GameState['customerHealingByType'],
     premiumPurchaseHistory: {},
-    unlocked: ['rice_level_2'],
+    unlocked: ['rice_level_2', 'tea_level_2', 'sweet_potato_level_2'],
     updatedAt: now
   };
 }

@@ -1,7 +1,7 @@
 [
   {
     "__type__": "cc.SceneAsset",
-    "_name": "Home",
+    "_name": "scene",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_native": "",
@@ -11,7 +11,7 @@
   },
   {
     "__type__": "cc.Scene",
-    "_name": "Home",
+    "_name": "scene-2d",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": null,
@@ -52,9 +52,9 @@
     },
     "autoReleaseAssets": false,
     "_globals": {
-      "__id__": 9
+      "__id__": 8
     },
-    "_id": "26b7042a-1aa1-43d8-85e5-acde4f146ecd"
+    "_id": "f3497aac-743b-4245-a9e1-a92ff669e8c7"
   },
   {
     "__type__": "cc.Node",
@@ -79,9 +79,6 @@
       },
       {
         "__id__": 7
-      },
-      {
-        "__id__": 8
       }
     ],
     "_prefab": null,
@@ -112,7 +109,7 @@
       "y": 0,
       "z": 0
     },
-    "_id": "beI88Z2HpFELqR4T5EMHpg"
+    "_id": "c6PCMDAjNICKvPcafl/Zn4"
   },
   {
     "__type__": "cc.Node",
@@ -157,7 +154,7 @@
       "y": 0,
       "z": 0
     },
-    "_id": "ebFwiq8gBFaYpqYbdoDODe"
+    "_id": "295s0WUBBJlp/uBTpGf+To"
   },
   {
     "__type__": "cc.Camera",
@@ -203,7 +200,7 @@
     "_usePostProcess": false,
     "_cameraType": -1,
     "_trackingType": 0,
-    "_id": "63WIch3o5BEYRlXzTT0oWc"
+    "_id": "92u4+wojdG96Rxa9PMdHaR"
   },
   {
     "__type__": "cc.UITransform",
@@ -225,7 +222,7 @@
       "x": 0.5,
       "y": 0.5
     },
-    "_id": "d6rUX5yfhMlKoWX2bSbawx"
+    "_id": "c0ErX5cWhPQ4MYHfxS/2Hx"
   },
   {
     "__type__": "cc.Canvas",
@@ -241,7 +238,7 @@
       "__id__": 4
     },
     "_alignCanvasWithScreen": true,
-    "_id": "12O/ljcVlEqLmVm3U2gEOQ"
+    "_id": "a0c7BmnRJBcID+jyiuNe5v"
   },
   {
     "__type__": "cc.Widget",
@@ -271,45 +268,33 @@
     "_originalHeight": 0,
     "_alignMode": 2,
     "_lockFlags": 0,
-    "_id": "c5V1EV8IpMtrIvY1OE9t2u"
-  },
-  {
-    "__type__": "f4bdaPxag9P9ImpSxAqbmGr",
-    "_name": "",
-    "_objFlags": 0,
-    "__editorExtras__": {},
-    "node": {
-      "__id__": 2
-    },
-    "_enabled": true,
-    "__prefab": null,
-    "_id": "aBcDeFgHiJkLmNoPqRsTuV"
+    "_id": "7ehKbHu1VCELAPX//9zamG"
   },
   {
     "__type__": "cc.SceneGlobals",
     "ambient": {
-      "__id__": 10
+      "__id__": 9
     },
     "shadows": {
-      "__id__": 11
+      "__id__": 10
     },
     "_skybox": {
-      "__id__": 12
+      "__id__": 11
     },
     "fog": {
-      "__id__": 13
+      "__id__": 12
     },
     "octree": {
-      "__id__": 14
+      "__id__": 13
     },
     "skin": {
-      "__id__": 15
+      "__id__": 14
     },
     "lightProbeInfo": {
-      "__id__": 16
+      "__id__": 15
     },
     "postSettings": {
-      "__id__": 17
+      "__id__": 16
     },
     "bakedWithStationaryMainLight": false,
     "bakedWithHighpLightmap": false

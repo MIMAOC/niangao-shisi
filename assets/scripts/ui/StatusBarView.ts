@@ -25,12 +25,11 @@ export class StatusBarView extends Component {
       { label: '金币', value: state.coins, color: new Color(238, 174, 55) },
       { label: '元宝', value: state.premiumIngots, color: new Color(221, 99, 112) },
       { label: '体力', value: state.stamina, color: new Color(91, 166, 126) },
-      { label: '治愈', value: state.healingPoints, color: new Color(102, 145, 190) },
       { label: '等级', value: state.shopLevel, color: new Color(174, 114, 164) }
     ];
 
-    const width = 130;
-    const gap = 10;
+    const width = 160;
+    const gap = 12;
     const startX = -((entries.length - 1) * (width + gap)) / 2;
     entries.forEach((entry, index) => {
       const chip = addPanel(
