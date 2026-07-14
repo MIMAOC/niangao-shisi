@@ -19,7 +19,8 @@ export const palette = {
   boardFrame: new Color(239, 221, 193),
   boardCell: new Color(255, 249, 233),
   goldStroke: new Color(190, 129, 49),
-  selected: new Color(255, 239, 152),
+  // 选中：把食材脚下那格的底色刷成暖橙，食材自己的颜色不动。
+  selected: new Color(250, 186, 92),
   orderReady: new Color(91, 166, 126),
   orderReadyPill: new Color(91, 166, 126, 46),
 

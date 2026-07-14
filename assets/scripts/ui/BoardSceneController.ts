@@ -5,6 +5,7 @@ import {
   director,
   Node,
   ResolutionPolicy,
+  Tween,
   UIOpacity,
   UITransform,
   Vec3,
@@ -62,6 +63,10 @@ const BOARD_PADDING = 10;
 const ITEM_SIZE = 82;
 /** 松手点离最近格子超过一格远，就当没落在棋盘上，弹回原位。 */
 const DROP_MAX_DISTANCE = CELL_SIZE;
+/** 选中底色淡入的时长；再长就拖沓了。 */
+const SELECT_FADE_SECONDS = 0.16;
+/** 松手后食材被「吸」进格子的时长。 */
+const SNAP_SECONDS = 0.14;
 
 /** 治愈配置没加载出来时的占位。真值全在 config/customer_healing.json 里，这里不留副本。 */
 const EMPTY_HEALING_CONFIG: CustomerHealingConfig = Object.freeze({
@@ -77,6 +82,9 @@ export class BoardSceneController extends Component {
   private healingConfig: CustomerHealingConfig = EMPTY_HEALING_CONFIG;
   private statusBar: StatusBarView | null = null;
   private readonly cellPositions: Vec3[] = [];
+  private readonly cellHighlights: Node[] = [];
+  /** 拖动中不点亮任何格子：食材已经不在格子里了，底色留在原地看着像还没拿起来。 */
+  private dragging = false;
   private contentRoot: Node | null = null;
   private orderLayer: Node | null = null;
   private readonly readyOrderItemIndexes = new Set<number>();
@@ -299,7 +307,7 @@ export class BoardSceneController extends Component {
           startY - row * (CELL_SIZE + CELL_GAP)
         );
         this.cellPositions[index] = position;
-        addPanel(
+        const cell = addPanel(
           frame,
           `BoardCell${index}`,
           position.x,
@@ -310,17 +318,54 @@ export class BoardSceneController extends Component {
           undefined,
           6
         );
+
+        // 暖橙底常驻在每格里，平时透明度为 0。选中时淡入——Graphics 直接改色是瞬时的，做不出这个。
+        const highlight = addPanel(cell, 'CellHighlight', 0, 0, CELL_SIZE, CELL_SIZE, palette.selected, undefined, 6);
+        highlight.addComponent(UIOpacity).opacity = 0;
+        this.cellHighlights[index] = highlight;
       }
     }
 
     this.renderBoardObjects();
   }
 
+  /**
+   * 选中的格子空了就取消选中。交付订单、放进背包都会把食材从格子里拿走，
+   * 但它们只管改棋盘，不会回头看选中的是不是正好那一格——留下的就是一个亮着的空格子。
+   * 拖动中不管：食材虽然在手上，棋盘数据里它还在原格，落子时才结算。
+   */
+  private normalizeSelection(): void {
+    const index = this.selectedCellIndex;
+    if (index === -1 || this.dragging) return;
+    if (index === this.state.backpackCellIndex || index === this.state.prepStationCellIndex) return;
+
+    if (!this.state.board[index]?.itemId) this.selectedCellIndex = -1;
+  }
+
+  /** 选中的那一格淡入暖橙底。食材（82）比格子（90）小一圈，四周会露出这层底。 */
+  private updateCellHighlights(): void {
+    this.cellHighlights.forEach((highlight, index) => {
+      const opacity = highlight.getComponent(UIOpacity);
+      if (!opacity) return;
+
+      Tween.stopAllByTarget(opacity);
+      if (this.dragging || index !== this.selectedCellIndex) {
+        opacity.opacity = 0;
+        return;
+      }
+      // 已经亮着就别再淡入一次：拖动中每次重绘都会走到这里。
+      if (opacity.opacity === 255) return;
+      tween(opacity).to(SELECT_FADE_SECONDS, { opacity: 255 }).start();
+    });
+  }
+
   private renderBoardObjects(): void {
     if (!this.boardFrame) return;
 
+    this.normalizeSelection();
     // 先重算每张订单，再画食材描边，刚合成出的食材会立即得到对应提示。
     if (this.orderLayer) this.buildOrders(this.orderLayer);
+    this.updateCellHighlights();
 
     this.boardObjects?.destroy();
     const objects = new Node('BoardObjects');
@@ -345,6 +390,7 @@ export class BoardSceneController extends Component {
     const position = this.cellPositions[cellIndex];
     if (!item || !position) return;
 
+    // 食材保持自己的颜色：选中是把它脚下那格底色刷成深棕（见 paintCells），描边只表示「订单需要它」。
     const itemNode = addPanel(
       parent,
       `Item${cellIndex}`,
@@ -353,9 +399,7 @@ export class BoardSceneController extends Component {
       ITEM_SIZE,
       ITEM_SIZE,
       getItemColor(item.chain),
-      this.selectedCellIndex === cellIndex
-        ? palette.selected
-        : this.readyOrderItemIndexes.has(cellIndex) ? palette.orderReady : undefined,
+      this.readyOrderItemIndexes.has(cellIndex) ? palette.orderReady : undefined,
       14
     );
     addText(itemNode, 'ItemName', item.name, 0, 0, 72, 58, 18, palette.ink);
@@ -367,8 +411,12 @@ export class BoardSceneController extends Component {
 
     makeDraggable(itemNode, {
       onDragStart: () => {
-        // 拖动中不能重建棋盘，否则手上这个节点会被销毁；等落子时统一重绘。
-        this.selectedCellIndex = -1;
+        // 一拿起来就选中它，介绍立刻出来；但格子不点亮——食材已经被拿走了。
+        // 棋盘不能整个重绘（手上这个节点会被销毁），所以只刷底色和信息条，两样都不碰食材节点。
+        this.dragging = true;
+        this.selectedCellIndex = cellIndex;
+        this.updateCellHighlights();
+        this.renderSelectionInfo();
       },
       onTap: () => this.toggleSelection(cellIndex, () => this.clearSelection()),
       onDrop: (node) => this.dropItem(node, cellIndex)
@@ -387,15 +435,19 @@ export class BoardSceneController extends Component {
       ITEM_SIZE,
       ITEM_SIZE,
       palette.prepStation,
-      this.selectedCellIndex === this.state.prepStationCellIndex ? palette.selected : palette.prepStationStroke,
+      palette.prepStationStroke,
       14
     );
-    addText(prepStation, 'PrepStationLabel', '备料台\n-1体力', 0, 0, 74, 62, 17, palette.ink);
+    addText(prepStation, 'PrepStationLabel', '备料台', 0, 0, 74, 62, 17, palette.ink);
     this.prepStationNode = prepStation;
 
     makeDraggable(prepStation, {
       onDragStart: () => {
+        // 设施拖起来不选中：选中态等于「再点一下就执行」，备料台会因此白扣体力。
+        this.dragging = true;
         this.selectedCellIndex = -1;
+        this.updateCellHighlights();
+        this.renderSelectionInfo();
       },
       onTap: () => this.toggleSelection(this.state.prepStationCellIndex, () => this.generateFromPrepStation()),
       onDrop: (node) => this.dropPrepStation(node)
@@ -415,14 +467,18 @@ export class BoardSceneController extends Component {
       ITEM_SIZE,
       ITEM_SIZE,
       palette.backpack,
-      this.selectedCellIndex === this.state.backpackCellIndex ? palette.selected : palette.backpackStroke,
+      palette.backpackStroke,
       6
     );
     addText(backpack, 'BackpackLabel', '背包', 0, 0, 74, 58, 24, palette.white);
 
     makeDraggable(backpack, {
       onDragStart: () => {
+        // 设施拖起来不选中：选中态等于「再点一下就执行」，备料台会因此白扣体力。
+        this.dragging = true;
         this.selectedCellIndex = -1;
+        this.updateCellHighlights();
+        this.renderSelectionInfo();
       },
       onTap: () => this.toggleSelection(this.state.backpackCellIndex, () => this.openBackpackModal()),
       onDrop: (node) => this.dropBackpack(node)
@@ -525,13 +581,14 @@ export class BoardSceneController extends Component {
     };
     this.persistState();
     this.renderStatusBar();
-    // 和合成一样：不弹提示，直接选中新食材，让底部信息条介绍它。
-    this.selectedCellIndex = spawnedIndex;
+    // 选中态留在备料台上：产出后如果跳到新食材身上，就得「点一下选中、再点一下产出」，
+    // 每出一个食材都要点两下。连点备料台应该一直出东西。
     this.renderBoardObjects();
     this.animateSettle(spawnedIndex);
   }
 
   private dropPrepStation(node: Node): void {
+    this.dragging = false;
     const targetIndex = this.findDropCellIndex(node.position);
     if (targetIndex === -1) {
       this.renderBoardObjects();
@@ -570,6 +627,7 @@ export class BoardSceneController extends Component {
   }
 
   private dropBackpack(node: Node): void {
+    this.dragging = false;
     const targetIndex = this.findDropCellIndex(node.position);
     if (targetIndex === -1) {
       this.renderBoardObjects();
@@ -598,14 +656,23 @@ export class BoardSceneController extends Component {
     if (result.displaced) this.animateDisplacement(result.displaced);
   }
 
+  /**
+   * 拖完之后，食材停在哪一格就选中哪一格，底部信息条随之介绍它。
+   * 重绘会把手上这个节点销毁、在格子中心重建一个，所以松手位置要先记下来，
+   * 让新节点从那儿被「吸」回格心——不然食材是瞬移过去的，落格没有任何手感。
+   */
   private dropItem(node: Node, cellIndex: number): void {
+    this.dragging = false;
+    const releasedAt = node.position.clone();
     const targetIndex = this.findDropCellIndex(node.position);
     if (targetIndex === -1 || targetIndex === cellIndex) {
-      this.renderBoardObjects();
+      this.selectCell(cellIndex);
+      this.snapItemIntoCell(cellIndex, releasedAt);
       return;
     }
 
     if (targetIndex === this.state.backpackCellIndex) {
+      // 食材离开棋盘进了背包，没有格子好选。
       this.storeItemInBackpack(cellIndex);
       return;
     }
@@ -614,15 +681,14 @@ export class BoardSceneController extends Component {
     if (merged.merged) {
       this.state = { ...this.state, board: merged.board };
       this.persistState();
-      // 不弹提示，直接选中合出来的食材，底部信息条自己会把它的名字和描述亮出来。
-      this.selectedCellIndex = targetIndex;
-      this.renderBoardObjects();
+      this.selectCell(targetIndex);
+      this.snapItemIntoCell(targetIndex, releasedAt);
       this.animateSettle(targetIndex);
       return;
     }
 
     if (targetIndex === this.state.prepStationCellIndex) {
-      this.pushPrepStationAside(cellIndex);
+      this.pushPrepStationAside(cellIndex, releasedAt);
       return;
     }
 
@@ -631,17 +697,33 @@ export class BoardSceneController extends Component {
       this.state.prepStationCellIndex
     ]);
     if (!moved.moved) {
-      this.renderBoardObjects();
+      this.selectCell(cellIndex);
+      this.snapItemIntoCell(cellIndex, releasedAt);
       return;
     }
 
     this.state = { ...this.state, board: moved.board };
     this.persistState();
+    this.selectCell(targetIndex);
+    this.snapItemIntoCell(targetIndex, releasedAt);
+    if (moved.displaced) this.animateDisplacement(moved.displaced);
+  }
+
+  /** 松手位置 → 格心，快、带一点回弹，像被磁铁吸进去。 */
+  private snapItemIntoCell(cellIndex: number, from: Readonly<Vec3>): void {
+    const node = this.boardObjects?.getChildByName(`Item${cellIndex}`);
+    const to = this.cellPositions[cellIndex];
+    if (!node || !to) return;
+
+    node.setPosition(from.x, from.y);
+    tween(node)
+      .to(SNAP_SECONDS, { position: new Vec3(to.x, to.y, 0) }, { easing: 'backOut' })
+      .start();
+  }
+
+  private selectCell(cellIndex: number): void {
+    this.selectedCellIndex = cellIndex;
     this.renderBoardObjects();
-    if (moved.displaced) {
-      this.animateDisplacement(moved.displaced);
-      this.animateSettle(targetIndex);
-    }
   }
 
   private submitOrder(activeOrder: ActiveOrder): void {
@@ -812,13 +894,14 @@ export class BoardSceneController extends Component {
   }
 
   /** 食材压到备料台头上，备料台照样被顺时针挤开——它不比食材金贵。 */
-  private pushPrepStationAside(itemCellIndex: number): void {
+  private pushPrepStationAside(itemCellIndex: number, releasedAt: Readonly<Vec3>): void {
     const stationIndex = this.state.prepStationCellIndex;
     const result = placeItemOnFixtureCell(this.state.board, itemCellIndex, stationIndex, [
       this.state.backpackCellIndex
     ]);
     if (!result.moved) {
-      this.renderBoardObjects();
+      this.selectCell(itemCellIndex);
+      this.snapItemIntoCell(itemCellIndex, releasedAt);
       return;
     }
 
@@ -828,8 +911,9 @@ export class BoardSceneController extends Component {
       prepStationCellIndex: result.fixtureCellIndex
     };
     this.persistState();
-    this.renderBoardObjects();
-    this.animateSettle(stationIndex);
+    // 备料台被推走了，食材占下它原来那一格。
+    this.selectCell(stationIndex);
+    this.snapItemIntoCell(stationIndex, releasedAt);
   }
 
   private animateDisplacement(displaced: DisplacedItem): void {
