@@ -1,14 +1,27 @@
-import { _decorator, Button, Color, Component, Label, Node } from 'cc';
+import { _decorator, Button, Color, Component, Graphics, Label, Node, UITransform } from 'cc';
 import { getStaminaRecoveryRemainingMs, STAMINA_AD_DAILY_LIMIT, STAMINA_MAX } from '../core/stamina';
-import type { GameState } from '../core/types';
+import type { GameState, LevelConfig } from '../core/types';
 import { addPanel, addText } from './UiKit';
+import { getLevelExperienceProgress } from './levelExperienceProgress';
 import { getStaminaLabelOffsetY } from './staminaStatusLayout';
 import { palette } from './theme';
 
 const { ccclass } = _decorator;
 
+/** 金币、元宝、体力等长方形状态块的宽度。 */
 const CHIP_WIDTH = 158;
+/** 相邻状态块之间的水平间距。 */
 const CHIP_GAP = 9;
+/** 左侧圆形头像的直径。 */
+const AVATAR_DIAMETER = 64;
+/** 头像外圈经验进度条的半径，略小于头像半径以免描边被裁切。 */
+const AVATAR_RADIUS = 29;
+/** 经验圆环描边的粗细。 */
+const AVATAR_RING_WIDTH = 6;
+/** 头像相对状态栏中心的横坐标；负数代表向左。 */
+const AVATAR_X = -300;
+/** 第一个（金币）状态块相对状态栏中心的横坐标；后续状态块按宽度和间距向右排列。 */
+const CHIP_START_X = -160;
 
 interface StatusChip {
   label: string;
@@ -19,8 +32,7 @@ interface StatusChip {
 const chips: StatusChip[] = [
   { label: '金币', color: palette.coin, read: (state) => state.coins },
   { label: '元宝', color: palette.ingot, read: (state) => state.premiumIngots },
-  { label: '体力', color: palette.stamina, read: (state) => state.stamina },
-  { label: '等级', color: palette.level, read: (state) => state.shopLevel }
+  { label: '体力', color: palette.stamina, read: (state) => state.stamina }
 ];
 
 /**
@@ -36,12 +48,20 @@ export class StatusBarView extends Component {
   private countdownLabel: Label | null = null;
   private adButton: Node | null = null;
   private container: Node | null = null;
+  private levelBadgeLabel: Label | null = null;
+  private levelRing: Graphics | null = null;
+  private levels: LevelConfig[] = [];
+
+  setLevels(levels: LevelConfig[]): void {
+    this.levels = levels;
+  }
 
   render(state: GameState, onStaminaAd?: () => void): void {
     const isFirstRender = !this.container;
     if (isFirstRender) this.build(onStaminaAd);
     // 首次进场直接显示，不然会从 0 滚上来。
     this.updateChips(state, isFirstRender);
+    this.paintLevelAvatar(state);
   }
 
   /** 数值不跳变，滚过去。真值早已在 state 里，这里只是让标签追上它。 */
@@ -75,12 +95,13 @@ export class StatusBarView extends Component {
       palette.statusStroke
     );
 
-    const startX = -((chips.length - 1) * (CHIP_WIDTH + CHIP_GAP)) / 2;
+    this.buildLevelAvatar();
+
     chips.forEach((entry, index) => {
       const chip = addPanel(
         this.container as Node,
         `Status${entry.label}`,
-        startX + index * (CHIP_WIDTH + CHIP_GAP),
+        CHIP_START_X + index * (CHIP_WIDTH + CHIP_GAP),
         0,
         CHIP_WIDTH,
         52,
@@ -100,8 +121,21 @@ export class StatusBarView extends Component {
       this.countdownLabel = addText(chip, 'StaminaCountdown', '', 46, -15, 64, 22, 12, palette.pureWhite);
 
       if (!onStaminaAd) return;
-      const button = addPanel(chip, 'StaminaAdButton', -42, -15, 70, 22, palette.staminaAd, undefined, 6);
-      addText(button, 'StaminaAdText', '广告+25', 0, 0, 66, 20, 11, palette.pureWhite);
+      const button = new Node('StaminaAdButton');
+      chip.addChild(button);
+      button.layer = chip.layer;
+      // 圆心贴在体力块左下角，圆形按钮略微跨出边框，作为补充体力的入口。
+      button.setPosition(-CHIP_WIDTH / 2, -26);
+      button.addComponent(UITransform).setContentSize(28, 28);
+      const buttonGraphics = button.addComponent(Graphics);
+      buttonGraphics.fillColor = palette.staminaAd;
+      buttonGraphics.circle(0, 0, 14);
+      buttonGraphics.fill();
+      buttonGraphics.strokeColor = palette.pureWhite;
+      buttonGraphics.lineWidth = 2;
+      buttonGraphics.circle(0, 0, 13);
+      buttonGraphics.stroke();
+      addText(button, 'StaminaAdText', '＋', 0, 0, 24, 24, 19, palette.pureWhite);
       button.addComponent(Button);
       button.on(Button.EventType.CLICK, onStaminaAd);
       this.adButton = button;
@@ -136,6 +170,49 @@ export class StatusBarView extends Component {
       const value = this.displayedValues.get(entry.label);
       if (label && value !== undefined) label.string = `${entry.label} ${Math.round(value)}`;
     });
+  }
+
+  private buildLevelAvatar(): void {
+    const avatar = new Node('LevelAvatar');
+    (this.container as Node).addChild(avatar);
+    avatar.layer = (this.container as Node).layer;
+    avatar.setPosition(AVATAR_X, 0);
+    avatar.addComponent(UITransform).setContentSize(AVATAR_DIAMETER, AVATAR_DIAMETER);
+
+    const background = avatar.addComponent(Graphics);
+    background.fillColor = palette.level;
+    background.circle(0, 0, 25);
+    background.fill();
+
+    const ringTrack = new Node('LevelExperienceTrack');
+    avatar.addChild(ringTrack);
+    ringTrack.layer = avatar.layer;
+    const trackGraphics = ringTrack.addComponent(Graphics);
+    trackGraphics.strokeColor = palette.levelRingTrack;
+    trackGraphics.lineWidth = AVATAR_RING_WIDTH;
+    trackGraphics.circle(0, 0, AVATAR_RADIUS);
+    trackGraphics.stroke();
+
+    const ring = new Node('LevelExperienceRing');
+    avatar.addChild(ring);
+    ring.layer = avatar.layer;
+    this.levelRing = ring.addComponent(Graphics);
+
+    addText(avatar, 'LevelAvatarPlaceholder', '头像', 0, 0, 42, 42, 13, palette.pureWhite);
+    const badge = addPanel(avatar, 'LevelBadge', 24, -24, 25, 25, palette.level, palette.pureWhite, 13);
+    this.levelBadgeLabel = addText(badge, 'LevelBadgeText', '', 0, 0, 22, 22, 14, palette.pureWhite);
+  }
+
+  private paintLevelAvatar(state: GameState): void {
+    if (!this.levelBadgeLabel || !this.levelRing) return;
+
+    this.levelBadgeLabel.string = String(state.shopLevel);
+    const progress = getLevelExperienceProgress(state.experience, state.shopLevel, this.levels);
+    this.levelRing.clear();
+    this.levelRing.strokeColor = palette.level;
+    this.levelRing.lineWidth = AVATAR_RING_WIDTH;
+    this.levelRing.arc(0, 0, AVATAR_RADIUS, Math.PI / 2, Math.PI / 2 + Math.PI * 2 * progress, false);
+    this.levelRing.stroke();
   }
 }
 

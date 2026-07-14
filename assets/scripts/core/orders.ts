@@ -49,6 +49,9 @@ export function completeOrder(
 
 export interface OrderRequirementMatch {
   requirement: OrderRequirement;
+  /** 所有可用于这条需求的棋盘格，用于棋盘上的完成提示。 */
+  highlightCellIndexes: number[];
+  /** 实际交付时消耗的格子，数量不会超过需求数量。 */
   matchedCellIndexes: number[];
   fulfilled: boolean;
 }
@@ -80,15 +83,16 @@ export function getOrderBoardMatch(
     return leftWildcard - rightWildcard;
   });
   const matches = requirements.map((requirement) => {
-    const matchedCellIndexes = board
+    const highlightCellIndexes = board
       .filter((cell) => cell.itemId !== null && !usedCellIndexes.has(cell.index))
       .filter((cell) => cell.itemId !== null && isRequirementItem(requirement, cell.itemId, items))
-      .slice(0, requirement.quantity)
       .map((cell) => cell.index);
+    const matchedCellIndexes = highlightCellIndexes.slice(0, requirement.quantity);
 
     matchedCellIndexes.forEach((index) => usedCellIndexes.add(index));
     return {
       requirement,
+      highlightCellIndexes,
       matchedCellIndexes,
       fulfilled: matchedCellIndexes.length === requirement.quantity
     };

@@ -11,8 +11,9 @@ import {
   view
 } from 'cc';
 import { createInitialGameState } from '../core/gameState';
+import { claimStaminaAd, recoverStamina } from '../core/stamina';
 import type { GameState, ItemConfig, LevelConfig } from '../core/types';
-import { loadGameState, loadJsonConfig } from './gameStore';
+import { loadGameState, loadJsonConfig, saveGameState } from './gameStore';
 import { getItemColor, palette } from './theme';
 import { addButton, addPanel, addText } from './UiKit';
 import { StatusBarView } from './StatusBarView';
@@ -31,6 +32,7 @@ export class HomeSceneController extends Component {
   private itemConfigs: ItemConfig[] = [];
   private levelConfigs: LevelConfig[] = [];
   private menuModal: Node | null = null;
+  private statusBar: StatusBarView | null = null;
 
   onLoad(): void {
     view.setDesignResolutionSize(750, 1334, ResolutionPolicy.FIXED_WIDTH);
@@ -65,7 +67,9 @@ export class HomeSceneController extends Component {
     addPanel(root, 'NightSky', 0, 0, 750, 1334, palette.nightSky, undefined, 0);
     addPanel(root, 'StreetGlow', 0, -410, 750, 514, palette.streetGlow, undefined, 0);
 
-    root.addComponent(StatusBarView).render(this.state);
+    this.statusBar = root.addComponent(StatusBarView);
+    this.statusBar.setLevels(this.levelConfigs);
+    this.renderStatusBar();
 
     addText(root, 'GameTitle', '年糕食肆', 0, 490, 520, 80, 54, palette.titleGold);
     addText(root, 'OpenSign', '今晚也好好吃饭', 0, 438, 420, 42, 24, palette.signText);
@@ -94,6 +98,19 @@ export class HomeSceneController extends Component {
     this.buildUnlockHint(panel);
 
     addButton(panel, 'CloseMenuButton', '关闭', 0, -420, 150, 58, palette.red, () => this.closeMenuModal());
+  }
+
+  private renderStatusBar(): void {
+    this.statusBar?.render(this.state, () => this.claimStaminaAd());
+  }
+
+  private claimStaminaAd(): void {
+    const result = claimStaminaAd(recoverStamina(this.state));
+    if (!result.granted) return;
+
+    this.state = result.state;
+    saveGameState(this.state);
+    this.renderStatusBar();
   }
 
   private buildChains(panel: Node): void {

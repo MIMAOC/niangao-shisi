@@ -29,6 +29,7 @@ export const palette = {
   stamina: new Color(91, 166, 126),
   staminaAd: new Color(71, 130, 102),
   level: new Color(174, 114, 164),
+  levelRingTrack: new Color(174, 114, 164, 72),
   statusBar: new Color(255, 247, 222),
   statusStroke: new Color(104, 73, 62),
 

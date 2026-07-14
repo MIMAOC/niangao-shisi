@@ -130,6 +130,19 @@ describe('orders', () => {
     expect(getOrderBoardMatch(secondOrder, board, items).complete).toBe(true);
   });
 
+  it('keeps every matching board cell available for order-ready highlights', () => {
+    const board = [
+      { index: 0, itemId: 'rice_2' },
+      { index: 1, itemId: 'rice_2' },
+      { index: 2, itemId: null }
+    ];
+
+    const match = getOrderBoardMatch(order, board, items);
+
+    expect(match.matchedCellIndexes).toEqual([0]);
+    expect(match.requirements[0].highlightCellIndexes).toEqual([0, 1]);
+  });
+
   it('adds healing from every submitted food in a multi-food order', () => {
     const multiFoodOrder: OrderConfig = {
       ...order,

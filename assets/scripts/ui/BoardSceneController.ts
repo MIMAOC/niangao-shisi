@@ -47,6 +47,7 @@ import type {
   GameState,
   ItemConfig,
   ItemId,
+  LevelConfig,
   OrderConfig
 } from '../core/types';
 import { makeDraggable } from './dragging';
@@ -79,6 +80,7 @@ export class BoardSceneController extends Component {
   private state: GameState = createInitialGameState();
   private orderConfigs: OrderConfig[] = [];
   private itemConfigs: ItemConfig[] = [];
+  private levelConfigs: LevelConfig[] = [];
   private healingConfig: CustomerHealingConfig = EMPTY_HEALING_CONFIG;
   private statusBar: StatusBarView | null = null;
   private readonly cellPositions: Vec3[] = [];
@@ -115,10 +117,11 @@ export class BoardSceneController extends Component {
 
   private async initializeScene(): Promise<void> {
     try {
-      [this.orderConfigs, this.itemConfigs, this.healingConfig] = await Promise.all([
+      [this.orderConfigs, this.itemConfigs, this.healingConfig, this.levelConfigs] = await Promise.all([
         loadJsonConfig<OrderConfig[]>('config/orders'),
         loadJsonConfig<ItemConfig[]>('config/items'),
-        loadJsonConfig<CustomerHealingConfig>('config/customer_healing')
+        loadJsonConfig<CustomerHealingConfig>('config/customer_healing'),
+        loadJsonConfig<LevelConfig[]>('config/levels')
       ]);
     } catch (error) {
       console.error('Failed to load board configs', error);
@@ -157,6 +160,7 @@ export class BoardSceneController extends Component {
 
     addPanel(root, 'PaperBackground', 0, 0, 750, 1334, palette.paper, undefined, 0);
     this.statusBar = root.addComponent(StatusBarView);
+    this.statusBar.setLevels(this.levelConfigs);
     this.renderStatusBar();
     this.schedule(this.refreshStamina, 1);
     addText(root, 'BoardTitle', '今日营业', 0, 500, 300, 54, 32, palette.ink);
@@ -199,7 +203,7 @@ export class BoardSceneController extends Component {
 
       const match = getOrderBoardMatch(order, this.state.board, this.itemConfigs);
       match.requirements.forEach((requirement) => {
-        requirement.matchedCellIndexes.forEach((cellIndex) => this.readyOrderItemIndexes.add(cellIndex));
+        requirement.highlightCellIndexes.forEach((cellIndex) => this.readyOrderItemIndexes.add(cellIndex));
       });
       const healing = this.getOrderHealingReward(order);
       // 每条需求单独画一行，备好的那行要能单独点亮，合成一整块文本就做不到。
