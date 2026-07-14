@@ -4,7 +4,7 @@
   { "id": "O03", "requiredItemId": "sweet_potato_2", "customerType": "elder", "customerName": "散步老人", "line": "这个味道真熟悉。", "difficulty": "easy", "rewards": { "coins": 12, "experience": 4 } },
   { "id": "O04", "requiredItemId": "rice_3", "customerType": "courier", "customerName": "快递员", "line": "能打包带走吗？", "difficulty": "normal", "rewards": { "coins": 18, "experience": 6 } },
   { "id": "O05", "requiredItemId": "tea_3", "customerType": "couple", "customerName": "年轻情侣", "line": "要一杯甜一点的。", "difficulty": "normal", "rewards": { "coins": 18, "experience": 6 } },
-  { "id": "O06", "requiredItemId": "sweet_potato_3", "customerType": "student", "customerName": "小朋友", "line": "闻起来好香。", "difficulty": "normal", "rewards": { "coins": 22, "experience": 8 } },
+  { "id": "O06", "requiredItemId": "sweet_potato_3", "requirements": [{ "itemId": "sweet_potato_3", "quantity": 1 }, { "itemId": "rice_2", "quantity": 1 }], "customerType": "student", "customerName": "小朋友", "line": "闻起来好香。", "difficulty": "normal", "rewards": { "coins": 22, "experience": 8 } },
   { "id": "O07", "requiredItemId": "rice_4", "customerType": "elder", "customerName": "常客阿姨", "line": "还是老样子。", "difficulty": "hard", "rewards": { "coins": 35, "experience": 12 } },
   { "id": "O08", "requiredItemId": "tea_4", "customerType": "mystery", "customerName": "拍照女孩", "line": "这个好可爱。", "difficulty": "hard", "rewards": { "coins": 35, "experience": 12 } },
   { "id": "O09", "requiredItemId": "sweet_potato_4", "customerType": "medical", "customerName": "夜班护士", "line": "辛苦一天啦。", "difficulty": "hard", "rewards": { "coins": 40, "experience": 14 } },

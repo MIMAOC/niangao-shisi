@@ -38,9 +38,17 @@ export function createBoard(size = BOARD_SIZE): BoardCell[] {
   return Array.from({ length: size }, (_, index) => ({ index, itemId: null }));
 }
 
+/** 新食材总是落在编号最小的空格；调用方想提前知道落点时也走这里，规则只留一份。 */
+export function findAvailableBoardCellIndex(
+  board: BoardCell[],
+  reservedCellIndexes: number | number[] = []
+): number {
+  const reserved = new Set(Array.isArray(reservedCellIndexes) ? reservedCellIndexes : [reservedCellIndexes]);
+  return board.find((cell) => cell.itemId === null && !reserved.has(cell.index))?.index ?? -1;
+}
+
 export function hasAvailableBoardCell(board: BoardCell[], reservedCellIndexes: number[] = []): boolean {
-  const reserved = new Set(reservedCellIndexes);
-  return board.some((cell) => cell.itemId === null && !reserved.has(cell.index));
+  return findAvailableBoardCellIndex(board, reservedCellIndexes) !== -1;
 }
 
 export function spawnBasicItem(
@@ -48,15 +56,13 @@ export function spawnBasicItem(
   itemId: ItemId,
   reservedCellIndexes: number | number[] = -1
 ): BoardCell[] {
-  const next = board.map((cell) => ({ ...cell }));
-  const reserved = new Set(Array.isArray(reservedCellIndexes) ? reservedCellIndexes : [reservedCellIndexes]);
-  const empty = next.find((cell) => cell.itemId === null && !reserved.has(cell.index));
-
-  if (!empty) {
+  const targetIndex = findAvailableBoardCellIndex(board, reservedCellIndexes);
+  if (targetIndex === -1) {
     throw new Error('Board is full');
   }
 
-  empty.itemId = itemId;
+  const next = board.map((cell) => ({ ...cell }));
+  next[targetIndex].itemId = itemId;
   return next;
 }
 

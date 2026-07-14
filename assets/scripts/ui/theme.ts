@@ -20,6 +20,8 @@ export const palette = {
   boardCell: new Color(255, 249, 233),
   goldStroke: new Color(190, 129, 49),
   selected: new Color(255, 239, 152),
+  orderReady: new Color(91, 166, 126),
+  orderReadyPill: new Color(91, 166, 126, 46),
 
   coin: new Color(238, 174, 55),
   ingot: new Color(221, 99, 112),
@@ -44,6 +46,7 @@ export const palette = {
   coinRewardText: new Color(177, 118, 37),
   healingRewardText: new Color(200, 86, 92),
 
+  toast: new Color(58, 54, 51, 235),
   overlay: new Color(48, 42, 39, 190),
   menuOverlay: new Color(28, 34, 44, 200),
   locked: new Color(214, 205, 186),

@@ -30,13 +30,37 @@ const chips: StatusChip[] = [
 @ccclass('StatusBarView')
 export class StatusBarView extends Component {
   private readonly valueLabels = new Map<string, Label>();
+  /** 标签上正在显示的数（会带小数，是滚动的中间值），和状态里的真值分开存。 */
+  private readonly displayedValues = new Map<string, number>();
+  private readonly targetValues = new Map<string, number>();
   private countdownLabel: Label | null = null;
   private adButton: Node | null = null;
   private container: Node | null = null;
 
   render(state: GameState, onStaminaAd?: () => void): void {
-    if (!this.container) this.build(onStaminaAd);
-    this.updateChips(state);
+    const isFirstRender = !this.container;
+    if (isFirstRender) this.build(onStaminaAd);
+    // 首次进场直接显示，不然会从 0 滚上来。
+    this.updateChips(state, isFirstRender);
+  }
+
+  /** 数值不跳变，滚过去。真值早已在 state 里，这里只是让标签追上它。 */
+  update(deltaTime: number): void {
+    if (!this.container) return;
+
+    let changed = false;
+    this.targetValues.forEach((target, label) => {
+      const current = this.displayedValues.get(label) ?? target;
+      if (current === target) return;
+
+      const next = Math.abs(target - current) < 1
+        ? target
+        : current + (target - current) * Math.min(1, deltaTime * 8);
+      this.displayedValues.set(label, next);
+      changed = true;
+    });
+
+    if (changed) this.paintValues();
   }
 
   private build(onStaminaAd?: () => void): void {
@@ -84,12 +108,13 @@ export class StatusBarView extends Component {
     });
   }
 
-  /** 注意不能叫 update：那是 Component 的每帧生命周期钩子。 */
-  private updateChips(state: GameState): void {
+  private updateChips(state: GameState, snapToTarget: boolean): void {
     chips.forEach((entry) => {
-      const label = this.valueLabels.get(entry.label);
-      if (label) label.string = `${entry.label} ${entry.read(state)}`;
+      const value = entry.read(state);
+      this.targetValues.set(entry.label, value);
+      if (snapToTarget) this.displayedValues.set(entry.label, value);
     });
+    this.paintValues();
 
     const staminaLabel = this.valueLabels.get('体力');
     staminaLabel?.node.setPosition(0, getStaminaLabelOffsetY(state.stamina));
@@ -103,6 +128,14 @@ export class StatusBarView extends Component {
     if (this.adButton) {
       this.adButton.active = state.stamina < STAMINA_MAX && state.staminaAdViews < STAMINA_AD_DAILY_LIMIT;
     }
+  }
+
+  private paintValues(): void {
+    chips.forEach((entry) => {
+      const label = this.valueLabels.get(entry.label);
+      const value = this.displayedValues.get(entry.label);
+      if (label && value !== undefined) label.string = `${entry.label} ${Math.round(value)}`;
+    });
   }
 }
 

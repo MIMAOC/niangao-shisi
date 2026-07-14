@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialGameState } from '../../assets/scripts/core/gameState';
-import { completeOrder, createOrderQueue, replaceCompletedOrder } from '../../assets/scripts/core/orders';
-import type { CustomerHealingConfig, OrderConfig } from '../../assets/scripts/core/types';
+import {
+  completeOrder,
+  createOrderQueue,
+  getOrderBoardMatch,
+  isOrderRequirementMet,
+  replaceCompletedOrder
+} from '../../assets/scripts/core/orders';
+import type { CustomerHealingConfig, ItemConfig, OrderConfig } from '../../assets/scripts/core/types';
+
+const items: ItemConfig[] = [
+  { id: 'rice_2', name: '米团', chain: 'rice', level: 2, nextId: 'rice_3', icon: '', description: '' },
+  { id: 'rice_3', name: '海苔饭团', chain: 'rice', level: 3, nextId: null, icon: '', description: '' },
+  { id: 'tea_2', name: '热茶', chain: 'tea', level: 2, nextId: 'tea_3', icon: '', description: '' }
+];
 
 const order: OrderConfig = {
   id: 'O01',
@@ -40,6 +52,106 @@ describe('orders', () => {
     expect('healingPoints' in result).toBe(false);
     expect(result.customerHealingByType.student).toBe(18);
     expect(result.customerHealingByType.worker).toBe(0);
+  });
+
+  it('adds newly reached customer unlocks to the player state', () => {
+    const state = {
+      ...createInitialGameState(1000),
+      customerHealingByType: { ...createInitialGameState(1000).customerHealingByType, student: 90 }
+    };
+    const config: CustomerHealingConfig = {
+      levelRequirements: [100],
+      customers: {
+        student: {
+          favoriteFoodIds: ['rice_2'],
+          foodHealing: { rice_2: 18 },
+          unlocks: [{ level: 2, type: 'action', id: 'student_wave', title: '开心挥手' }]
+        }
+      }
+    };
+
+    const result = completeOrder(state, order, 'rice_2', config);
+
+    expect(result.unlocked).toContain('student_wave');
+  });
+
+  it('matches exact requests and allows any level three food for flexible orders', () => {
+    const flexibleOrder = { ...order, requiredItemId: 'any_level_3' as const };
+
+    expect(isOrderRequirementMet(order, 'rice_2', items)).toBe(true);
+    expect(isOrderRequirementMet(order, 'tea_2', items)).toBe(false);
+    expect(isOrderRequirementMet(flexibleOrder, 'rice_3', items)).toBe(true);
+    expect(isOrderRequirementMet(flexibleOrder, 'rice_2', items)).toBe(false);
+  });
+
+  it('matches every requirement of a multi-food order using different board cells', () => {
+    const multiFoodOrder: OrderConfig = {
+      ...order,
+      requirements: [
+        { itemId: 'rice_2', quantity: 1 },
+        { itemId: 'tea_2', quantity: 1 }
+      ]
+    };
+    const board = [
+      { index: 0, itemId: 'rice_2' },
+      { index: 1, itemId: 'tea_2' },
+      { index: 2, itemId: null }
+    ];
+
+    const match = getOrderBoardMatch(multiFoodOrder, board, items);
+
+    expect(match.complete).toBe(true);
+    expect(match.matchedCellIndexes).toEqual([0, 1]);
+    expect(match.requirements.map((requirement) => requirement.fulfilled)).toEqual([true, true]);
+  });
+
+  it('does not reuse one board food for two quantities in the same order', () => {
+    const doubleRiceOrder: OrderConfig = {
+      ...order,
+      requirements: [{ itemId: 'rice_2', quantity: 2 }]
+    };
+    const board = [
+      { index: 0, itemId: 'rice_2' },
+      { index: 1, itemId: null }
+    ];
+
+    const match = getOrderBoardMatch(doubleRiceOrder, board, items);
+
+    expect(match.complete).toBe(false);
+    expect(match.matchedCellIndexes).toEqual([0]);
+    expect(match.requirements[0].fulfilled).toBe(false);
+  });
+
+  it('allows the same board food to mark multiple orders ready before either is submitted', () => {
+    const secondOrder: OrderConfig = { ...order, id: 'O02' };
+    const board = [{ index: 0, itemId: 'rice_2' }];
+
+    expect(getOrderBoardMatch(order, board, items).complete).toBe(true);
+    expect(getOrderBoardMatch(secondOrder, board, items).complete).toBe(true);
+  });
+
+  it('adds healing from every submitted food in a multi-food order', () => {
+    const multiFoodOrder: OrderConfig = {
+      ...order,
+      requirements: [
+        { itemId: 'rice_2', quantity: 1 },
+        { itemId: 'tea_2', quantity: 1 }
+      ]
+    };
+    const config: CustomerHealingConfig = {
+      levelRequirements: [100],
+      customers: {
+        student: {
+          favoriteFoodIds: ['rice_2'],
+          foodHealing: { rice_2: 18, tea_2: 9 },
+          unlocks: []
+        }
+      }
+    };
+
+    const result = completeOrder(createInitialGameState(1000), multiFoodOrder, ['rice_2', 'tea_2'], config);
+
+    expect(result.customerHealingByType.student).toBe(27);
   });
 
   it('creates a sorted queue from unlocked orders with at least one easy order and no more than one hard order', () => {

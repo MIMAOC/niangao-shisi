@@ -25,6 +25,8 @@ export interface ItemConfig {
 export interface OrderConfig {
   id: OrderId;
   requiredItemId: ItemId | 'any_level_3';
+  /** 未配置时兼容早期的一种食材订单。 */
+  requirements?: OrderRequirement[];
   customerType: CustomerType;
   customerName: string;
   line: string;
@@ -33,6 +35,11 @@ export interface OrderConfig {
     coins: number;
     experience: number;
   };
+}
+
+export interface OrderRequirement {
+  itemId: ItemId | 'any_level_3';
+  quantity: number;
 }
 
 export interface LevelConfig {
